@@ -163,7 +163,7 @@
   function renderLede() {
     const d = yearData();
     $("lede").innerHTML = `Federal agencies committed a net <span class="figure">${money(d.national.net_obligations_cents)}</span> in contracts in fiscal year ${d.fiscal_year}.`;
-    $("lede-sub").textContent = "Select a state to see which agencies paid for work there and which companies received it.";
+    $("lede-sub").textContent = "Select a state to see which agencies committed funding for work there and which companies received it.";
     document.title = `Money Trail: federal contracts, fiscal year ${d.fiscal_year}`;
   }
 
@@ -320,7 +320,7 @@
     if (agencies.length) {
       const big = agencies.filter((a) => Math.abs(a.gap_cents) >= 100000000 * 100);
       const rest = agencies.filter((a) => Math.abs(a.gap_cents) < 100000000 * 100);
-      $("reconciliation").insertAdjacentHTML("beforeend", `<p>By agency, ${rest.length} of the ${agencies.length} largest agencies are within $100 million of USAspending's figure. ${big.length ? `The gap sits in ${big.map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : ""}</p>`);
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Compared agency by agency over the same 51 places, ${rest.length} of the ${agencies.length} largest agencies are within $100 million of USAspending's figure. ${big.length ? `The gap sits in ${big.map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : ""}</p>`);
     }
     const d = yearData();
     const matches = d.deleted_key_matches;

@@ -31,7 +31,8 @@ class GuardedFile(io.BufferedIOBase):
     def __init__(self, path: str | Path, reserve_gib: float = 8):
         self.path = Path(path)
         self.reserve_gib = reserve_gib
-        self.stream = self.path.open("xb")
+        # Unbuffered, so each checked write is the write that reaches the file.
+        self.stream = self.path.open("xb", buffering=0)
         self.written = 0
 
     def writable(self) -> bool:

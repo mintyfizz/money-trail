@@ -39,10 +39,12 @@ and **rejected**: the 50-state-and-DC gap on contract codes A–D moved from +$1
 (independent check by Codex, `stale-key-independent-check.json`; reproduced here). Restricting the
 removal to rows with a live twin gave the same result.
 
-By agency, every civilian agency matches USAspending within roughly 0.1%; the entire gap is the
-Department of Defense: +$10.9B as published, −$35.5B with the deleted keys removed. USAspending's
-live Defense figure counts both copies for some re-keyed pairs and one for others, and no rule
-applied to the archive reproduces it without an official figure from the same date.
+A first per-agency comparison used a broader official scope (domestic, which includes territories)
+than ours (50 states and DC), so it is indicative only: civilian agencies were within roughly 0.1%
+and the difference sat in the Department of Defense (+$10.9B as published, −$35.5B with deleted
+keys removed). The build now repeats that comparison with identical 51-place filters and records
+it in the reconciliation output; conclusions wait for that result. No rule applied to the archive
+is adopted without an official figure from the same date.
 
 So the build publishes the archive as Treasury published it. Matched rows are reported
 (`deleted_key_matches`) and written to `stale-rows.parquet` for audit, but not removed; the
