@@ -34,25 +34,32 @@ class ReleaseServer:
                 if '/assets?' in args[3]:
                     return json.dumps([self.assets()])
                 return json.dumps([[self.info] if self.info is not None else []])
+            if args[1:3] == ['--method', 'POST']:
+                endpoint = args[3]
+                if endpoint.endswith('/releases'):
+                    fields = dict(item.split('=', 1) for item in args[4:] if '=' in item)
+                    self.info = {'id': 1, 'draft': True, 'tag_name': fields['tag_name'],
+                                 'target_commitish': fields['target_commitish'],
+                                 'html_url': 'https://github.com/test/repo/releases/tag/' + fields['tag_name']}
+                    return json.dumps(self.info)
+                path = Path(args[args.index('--input') + 1])
+                if not self.info['draft'] or path.name in self.files:
+                    raise AssertionError('Unexpected published overwrite')
+                self.files[path.name] = path.read_bytes()
+                return '{}'
+            if args[1:3] == ['--method', 'PATCH']:
+                self.info['draft'] = False
+                self.published = True
+                return json.dumps(self.info)
             if '/releases/tags/' in args[1]:
                 if self.info is None or self.info['draft']:
                     raise subprocess.CalledProcessError(1, args, stderr='HTTP 404')
                 return json.dumps(self.info)
+            if '/releases/' in args[1]:
+                return json.dumps(self.info)
             return '{}'
         action, tag = args[1:3]
-        if action == 'create':
-            self.info = {'id': 1, 'draft': True, 'tag_name': tag,
-                         'target_commitish': args[args.index('--target') + 1],
-                         'html_url': 'https://github.com/test/repo/releases/tag/' + tag}
-        elif action == 'upload':
-            path = Path(args[3])
-            if not self.info['draft'] or path.name in self.files:
-                raise AssertionError('Unexpected published overwrite')
-            self.files[path.name] = path.read_bytes()
-        elif action == 'edit':
-            self.info['draft'] = False
-            self.published = True
-        elif action == 'download':
+        if action == 'download':
             name = args[args.index('--pattern') + 1]
             destination = Path(args[args.index('--dir') + 1]) / name
             self.downloads.append(name)

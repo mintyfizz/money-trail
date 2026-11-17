@@ -22,7 +22,7 @@ on:
         required: true
       revision:
         description: Snapshot revision; increase for a deliberate rebuild, never overwrite
-        default: '1'
+        default: '2'
         required: true
       catalog:
         description: 'Saved catalogue for smallest mode; leave blank for fresh discovery or another scope/year'
@@ -64,7 +64,7 @@ jobs:
           AWARD_KIND: ${{ inputs.kind || 'contracts' }}
           AGENCY: ${{ inputs.agency || 'smallest' }}
           MAX_OUTPUT_GIB: ${{ inputs.max_output_gib || '2' }}
-          SNAPSHOT_REVISION: ${{ inputs.revision || '1' }}
+          SNAPSHOT_REVISION: ${{ inputs.revision || '2' }}
           SAVED_CATALOG: ${{ github.event_name == 'push' && 'docs/measurements/fy2025-agencies.json' || inputs.catalog }}
         run: |
           args=(--year "$FISCAL_YEAR" --kind "$AWARD_KIND" --agency "$AGENCY"

@@ -17,7 +17,11 @@ EMPTY_SHA256 = hashlib.sha256(b'').hexdigest()
 
 
 def gh(*args):
-    return subprocess.run(['gh', *map(str, args)], check=True, capture_output=True, text=True).stdout
+    try:
+        return subprocess.run(['gh', *map(str, args)], check=True, capture_output=True, text=True).stdout
+    except subprocess.CalledProcessError as error:
+        error.add_note((error.stderr or '').strip())
+        raise
 
 
 def api(endpoint):
@@ -118,10 +122,11 @@ def publish(raw, directory, catalog_path, run_path, repository, commit, revision
                          f'{manifest["rejected_rows"]:,} preserved rejects. Independent field-value/read-back validation passed.\n\n'
                          'The original ZIP is retained. This scope does not establish national reconciliation. '
                          'snapshot.json lists exact file sizes and SHA-256 values. Zero-byte files are reconstructed from its inline-empty entries.\n')
-        gh('release', 'create', tag, '--repo', repository, '--target', commit, '--draft', '--prerelease',
-           '--title', f'{record["agency_name"]} FY{record["fiscal_year"]} — {manifest["snapshot_date"]}',
-           '--notes-file', notes)
-        existing = release_info(repository, tag)
+        existing = json.loads(gh('api', '--method', 'POST', f'repos/{repository}/releases',
+                                 '-f', f'tag_name={tag}', '-f', f'target_commitish={commit}',
+                                 '-F', 'draft=true', '-F', 'prerelease=true',
+                                 '-f', f'name={record["agency_name"]} FY{record["fiscal_year"]} — {manifest["snapshot_date"]}',
+                                 '-F', f'body=@{notes}'))
     if existing['target_commitish'] != commit:
         raise RuntimeError('Release belongs to a different code revision; choose a new snapshot revision')
     remote = {asset['name']: asset for asset in release_assets(repository, existing['id'])}
@@ -136,7 +141,9 @@ def publish(raw, directory, catalog_path, run_path, repository, commit, revision
             continue
         if not existing['draft']:
             raise RuntimeError('Published snapshots are never mutated')
-        gh('release', 'upload', tag, path, '--repo', repository)
+        gh('api', '--method', 'POST',
+           f'https://uploads.github.com/repos/{repository}/releases/{existing["id"]}/assets?name={path.name}',
+           '-H', 'Content-Type: application/octet-stream', '--input', path)
     for attempt in range(3):
         remote = {asset['name']: asset for asset in release_assets(repository, existing['id'])}
         try:
@@ -150,8 +157,9 @@ def publish(raw, directory, catalog_path, run_path, repository, commit, revision
                 raise
             time.sleep(2)
     if existing['draft']:
-        gh('release', 'edit', tag, '--repo', repository, '--draft=false', '--prerelease', '--latest=false')
-    verified = release_info(repository, tag)
+        gh('api', '--method', 'PATCH', f'repos/{repository}/releases/{existing["id"]}',
+           '-F', 'draft=false', '-F', 'prerelease=true', '-f', 'make_latest=false')
+    verified = api(f'repos/{repository}/releases/{existing["id"]}')
     if verified['draft']:
         raise RuntimeError('Snapshot remains a draft')
     return {'tag': tag, 'url': verified['html_url'], 'asset_count': len(expected),
