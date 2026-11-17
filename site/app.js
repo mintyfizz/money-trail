@@ -38,7 +38,7 @@
   function shortMoney(cents) {
     const value = Math.abs(dollars(cents));
     const sign = cents < 0 ? "−" : "";
-    if (value >= 1e9) return `${sign}$${d3.format(".2~f")(value / 1e9)}B`;
+    if (value >= 1e9) return `${sign}$${d3.format(".3~r")(value / 1e9)}B`;
     if (value >= 1e6) return `${sign}$${d3.format(".3~r")(value / 1e6)}M`;
     if (value >= 1e3) return `${sign}$${d3.format(".3~r")(value / 1e3)}K`;
     return `${sign}$${d3.format(",.0f")(value)}`;
@@ -56,6 +56,14 @@
     if (text !== text.toUpperCase()) return text;
     return text.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase())
       .replace(/\b(Llc|Inc|Lp|Llp|Usa|Us|Nasa|Ibm|Bae|Ii|Iii)\b/g, (m) => m.toUpperCase());
+  }
+
+  function sentence(text) {
+    // Award descriptions arrive in capitals; show them in sentence case, trimmed.
+    const t = text.trim().replace(/\s+/g, " ");
+    const lower = t === t.toUpperCase() ? t.toLowerCase() : t;
+    const cut = lower.length > 110 ? lower.slice(0, 107).replace(/\s\S*$/, "") + "\u2026" : lower;
+    return cut.charAt(0).toUpperCase() + cut.slice(1);
   }
 
   /* ---------- Values ---------- */
@@ -230,7 +238,7 @@
       <h3>Largest recipients</h3>
       <ol class="recipients">${s.recipients.slice(0, 6).map((r) => `
         <li><div class="row"><span class="name">${esc(titleCase(r.name))}</span><span class="figure${r.amount_cents < 0 ? " negative" : ""}">${money(r.amount_cents)}</span></div>
-          <div class="meta">${d3.format(",")(r.awards)} award${r.awards === 1 ? "" : "s"}${r.parent && r.parent !== r.name ? `; part of ${esc(titleCase(r.parent))}` : ""}${r.example ? `. Largest: ${esc(r.example.toLowerCase())}` : ""}</div></li>`).join("")}</ol>
+          <div class="meta">${d3.format(",")(r.awards)} award${r.awards === 1 ? "" : "s"}${r.parent && r.parent !== r.name ? `; part of ${esc(titleCase(r.parent))}` : ""}${r.example ? `. Largest: ${esc(sentence(r.example))}` : ""}</div></li>`).join("")}</ol>
       <p class="note">Recipients are grouped by their federal entity ID, never by name.</p>
       <h3>By contract type</h3>
       ${bars(types)}
