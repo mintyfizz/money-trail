@@ -1,0 +1,23 @@
+{
+  "release_url": "https://github.com/mintyfizz/money-trail/releases/tag/snapshot-2026-11-06-fy2025-contracts-agency-3-r2",
+  "run_url": "https://github.com/mintyfizz/money-trail/actions/runs/44071758365",
+  "code_commit": "250c561351e01ca252668511e55e1f1ec5c609e4",
+  "local_directory": "data/github/snapshot-2026-11-06-fy2025-contracts-agency-3-r2",
+  "download_seconds": 6.787,
+  "local_files": 7,
+  "local_bytes": 191398,
+  "raw_zip_downloaded_to_mac": false,
+  "free_disk_bytes_before": 23104102400,
+  "free_disk_bytes_after": 23104049152,
+  "reserve_gib": 8,
+  "row_count": 106,
+  "source_columns": 297,
+  "parquet_bytes": 119809,
+  "source_zip_bytes": 20541,
+  "parquet_to_zip_ratio": 5.8327,
+  "rejected_rows": 0,
+  "source_sha256": "e15c0098208ffe44b001ea3db9634ab1b3dc61f51b07651e0c613e7cb3d91111",
+  "all_source_columns_are_strings": true,
+  "logical_row_numbers_verified": true,
+  "local_checksums_verified": true
+}

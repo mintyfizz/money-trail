@@ -2,9 +2,9 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: milestone 1 initiated, not complete.** A remote GitHub Actions ingestion path and verified private release storage are now implemented; the first remote conversion is pending live validation. Per-agency discovery, sequential resumable downloads, full ZIP verification batch Parquet conversion, independent value/count validation and guarded ZIP deletion are implemented. FY2025 national ZIP sizes were verified; a 10,000-record contract prefix was inspected. A live discovery attempt confirmed 17 of 112 listed agencies before source failures returned; no complete agency conversion has run. Full national downloads, assistance profiling and official-total reconciliation are still outstanding. There is no dashboard or scheduled refresh yet.
+**Status: the first remote raw-data pilot passed; milestone 1 remains in progress.** A GitHub runner downloaded and verified the smallest nonempty agency in the saved catalogue: Library of Congress FY2025 contracts, 106 rows, 297 source columns and zero rejects. The 20,541-byte ZIP produced 119,809 bytes of text-preserving Parquet (5.8327×). The original ZIP and verified outputs are retained in a [private release](https://github.com/mintyfizz/money-trail/releases/tag/snapshot-2026-11-06-fy2025-contracts-agency-3-r2); the Mac downloaded only Parquet/records, with 21.52 GiB free afterward. Four smaller archives contained headers only. The saved catalogue remains partial (17 of 112 agencies); no national conversion, assistance profiling or official-total reconciliation is complete. There is no dashboard or scheduled refresh yet.
 
-See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), and [next steps](docs/NEXT.md).
+See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), [remote snapshot decision](docs/decisions/004-remote-snapshots.md), and [next steps](docs/NEXT.md).
 
 ## The three questions
 
@@ -38,10 +38,10 @@ See [remote snapshots](docs/decisions/004-remote-snapshots.md) for retention, co
 After publication, download only the preserved Parquet and validation records with the authenticated GitHub CLI:
 
 ```sh
-.venv/bin/python -m pipeline.snapshots SNAPSHOT_TAG --repo mintyfizz/money-trail --reserve-gib 8
+.venv/bin/python -m pipeline.snapshots snapshot-2026-11-06-fy2025-contracts-agency-3-r2 --repo mintyfizz/money-trail --reserve-gib 8
 ```
 
-Replace `SNAPSHOT_TAG` with the exact release tag. Data lands under `data/github/`. The Mac never needs the original ZIP for this path. Both machines retain an 8 GiB free-space reserve. Outputs are capped at 2 GiB per archive by default; each release asset must be below 2 GiB. A small agency's Parquet/ZIP ratio is only a provisional capacity scenario because metadata overhead dominates tiny files.
+The command uses the verified pilot release; use another exact tag for a later snapshot. Data lands under `data/github/`. The Mac does not download the original ZIP on this path. The retained release ZIP is the real importer fixture. Both machines retain an 8 GiB free-space reserve. Outputs are capped at 2 GiB per archive by default; each release asset must be below 2 GiB. A small agency's Parquet/ZIP ratio is only a provisional capacity scenario because metadata overhead dominates tiny files.
 
 ## Local ingestion alternative
 

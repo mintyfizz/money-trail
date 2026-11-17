@@ -1,0 +1,184 @@
+{
+  "status": "passed",
+  "release_url": "https://github.com/mintyfizz/money-trail/releases/tag/snapshot-2026-11-06-fy2025-contracts-agency-3-r2",
+  "run_url": "https://github.com/mintyfizz/money-trail/actions/runs/44071758365",
+  "code_commit": "250c561351e01ca252668511e55e1f1ec5c609e4",
+  "snapshot_date": "2026-11-06",
+  "agency": "Library of Congress",
+  "agency_id": 3,
+  "fiscal_year": 2025,
+  "kind": "contracts",
+  "runner_region": "northcentralus",
+  "runner_job_seconds": 29,
+  "source_sha256": "e15c0098208ffe44b001ea3db9634ab1b3dc61f51b07651e0c613e7cb3d91111",
+  "runner_measurements": {
+    "started_at": "2026-11-17T11:11:45.822898+00:00",
+    "status": "validated",
+    "code_commit": "250c561351e01ca252668511e55e1f1ec5c609e4",
+    "runner": "github-hosted",
+    "run_url": "https://github.com/mintyfizz/money-trail/actions/runs/44071758365",
+    "free_disk_bytes_before": 15340863488,
+    "reserve_gib": 8,
+    "source_zip_policy": "retain_original_in_verified_release",
+    "candidates": [
+      {
+        "source_file": "FY2025_010_Contracts_Full_20261106.zip",
+        "source_sha256": "7afeb59ef8c5490fc1e916984a9c77b4a0db7d5ace129940564168d62c7a68b1",
+        "source_bytes": 2540,
+        "snapshot_date": "2026-11-06",
+        "csv_rows": 0,
+        "valid_rows": 0,
+        "rejected_rows": 0,
+        "parquet_bytes": 40516,
+        "parquet_to_zip_ratio": 15.9512,
+        "elapsed_seconds": 0.013
+      },
+      {
+        "source_file": "FY2025_018_Contracts_Full_20261106.zip",
+        "source_sha256": "af8c78643127f053c6c5621107d46ff36da92237fd1610c160525c8da32c752b",
+        "source_bytes": 2540,
+        "snapshot_date": "2026-11-06",
+        "csv_rows": 0,
+        "valid_rows": 0,
+        "rejected_rows": 0,
+        "parquet_bytes": 40516,
+        "parquet_to_zip_ratio": 15.9512,
+        "elapsed_seconds": 0.008
+      },
+      {
+        "source_file": "FY2025_025_Contracts_Full_20261106.zip",
+        "source_sha256": "1fbd6b4c229dbddfea9eb0afec44c5f86be11220ccd8b6f11982de536eab23a1",
+        "source_bytes": 2540,
+        "snapshot_date": "2026-11-06",
+        "csv_rows": 0,
+        "valid_rows": 0,
+        "rejected_rows": 0,
+        "parquet_bytes": 40516,
+        "parquet_to_zip_ratio": 15.9512,
+        "elapsed_seconds": 0.008
+      },
+      {
+        "source_file": "FY2025_3303_Contracts_Full_20261106.zip",
+        "source_sha256": "271d8c806e69f7a484f50cd0579da2dd461362c9c8e8b4333fdbe7b4c55b1659",
+        "source_bytes": 2542,
+        "snapshot_date": "2026-11-06",
+        "csv_rows": 0,
+        "valid_rows": 0,
+        "rejected_rows": 0,
+        "parquet_bytes": 40517,
+        "parquet_to_zip_ratio": 15.939,
+        "elapsed_seconds": 0.008
+      },
+      {
+        "source_file": "FY2025_003_Contracts_Full_20261106.zip",
+        "source_sha256": "e15c0098208ffe44b001ea3db9634ab1b3dc61f51b07651e0c613e7cb3d91111",
+        "source_bytes": 20541,
+        "snapshot_date": "2026-11-06",
+        "csv_rows": 106,
+        "valid_rows": 106,
+        "rejected_rows": 0,
+        "parquet_bytes": 119809,
+        "parquet_to_zip_ratio": 5.8327,
+        "elapsed_seconds": 0.041
+      }
+    ],
+    "selection_basis": "smallest_nonempty_in_saved_catalogue; unresolved agencies excluded",
+    "saved_catalog": "docs/measurements/fy2025-agencies.json",
+    "selected_source": {
+      "fiscal_year": 2025,
+      "agency_name": "Library of Congress",
+      "agency_acronym": "LOC",
+      "type": "contracts",
+      "updated_date": "2026-11-06",
+      "file_name": "FY2025_003_Contracts_Full_20261106.zip",
+      "url": "https://files.usaspending.gov/award_data_archive/FY2025_003_Contracts_Full_20261106.zip",
+      "agency_id": 3,
+      "http": {
+        "bytes": 20541,
+        "etag": "\"5c009128dd535eab864f0591486f2789\"",
+        "last_modified": "Mon, 09 Nov 2026 07:03:48 GMT"
+      },
+      "discovered_at": "2026-11-17T08:17:24.214410+00:00",
+      "delta_files": [
+        {
+          "fiscal_year": null,
+          "agency_name": "Library of Congress",
+          "agency_acronym": "LOC",
+          "type": "contracts",
+          "updated_date": "2026-11-06",
+          "file_name": "FY(All)_003_Contracts_Delta_20261106.zip",
+          "url": "https://files.usaspending.gov/award_data_archive/FY(All)_003_Contracts_Delta_20261106.zip"
+        }
+      ]
+    },
+    "finished_at": "2026-11-17T11:11:54.536230+00:00",
+    "free_disk_bytes_after": 15340376064,
+    "catalog_compressed_bytes": 80361522,
+    "catalog_archives": 17,
+    "selected": {
+      "source_file": "FY2025_003_Contracts_Full_20261106.zip",
+      "source_sha256": "e15c0098208ffe44b001ea3db9634ab1b3dc61f51b07651e0c613e7cb3d91111",
+      "source_bytes": 20541,
+      "snapshot_date": "2026-11-06",
+      "csv_rows": 106,
+      "valid_rows": 106,
+      "rejected_rows": 0,
+      "parquet_bytes": 119809,
+      "parquet_to_zip_ratio": 5.8327,
+      "elapsed_seconds": 0.041
+    },
+    "estimate_policy": "Small-agency ratio is a provisional scenario, not a full-year capacity guarantee"
+  },
+  "remote_assets": [
+    {
+      "name": "catalog.json",
+      "size": 49378,
+      "digest": "sha256:b922b6bbfdd1bf045aa81ce52fa78044f08ecf0be09c60b3a818154adcad84a6",
+      "state": "uploaded"
+    },
+    {
+      "name": "FY2025_003_Contracts_Full_20261106.zip",
+      "size": 20541,
+      "digest": "sha256:e15c0098208ffe44b001ea3db9634ab1b3dc61f51b07651e0c613e7cb3d91111",
+      "state": "uploaded"
+    },
+    {
+      "name": "FY2025_003_Contracts_Full_20261106.zip.receipt.json",
+      "size": 516,
+      "digest": "sha256:7cf67917a3b02a30185cc7b0614cf9a10dada7c77a811dc54e7ea93cc80cdfc1",
+      "state": "uploaded"
+    },
+    {
+      "name": "manifest.json",
+      "size": 14607,
+      "digest": "sha256:498d46da7009d44effaba9901f5f0b1618d178c29e2fce83d9ef833acdb931ca",
+      "state": "uploaded"
+    },
+    {
+      "name": "member-0000-part-00000.parquet",
+      "size": 119809,
+      "digest": "sha256:5327b0ee0859c0a009fb5799988bbbb9ed23d0f3c9279fbf7a1a33eff486ff85",
+      "state": "uploaded"
+    },
+    {
+      "name": "run.json",
+      "size": 4186,
+      "digest": "sha256:307b43f130d7050bf081d16467b3e2d9533a0cfb1df55a4d7c60e15d298924d8",
+      "state": "uploaded"
+    },
+    {
+      "name": "snapshot.json",
+      "size": 2902,
+      "digest": "sha256:4425584d7c3dcf027008f0d437b9bf50213eb7c741483c056ddb55baf0240efc",
+      "state": "uploaded"
+    }
+  ],
+  "remote_asset_sha256_verified": true,
+  "raw_zip_retained": true,
+  "raw_zip_downloaded_to_mac": false,
+  "automated_tests_passed": 64,
+  "national_conversion_started": false,
+  "catalog_complete": false,
+  "catalog_known_agencies": 17,
+  "catalog_unresolved_agencies": 95
+}
