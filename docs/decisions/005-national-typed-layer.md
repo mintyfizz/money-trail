@@ -39,19 +39,36 @@ and **rejected**: the 50-state-and-DC gap on contract codes A–D moved from +$1
 (independent check by Codex, `stale-key-independent-check.json`; reproduced here). Restricting the
 removal to rows with a live twin gave the same result.
 
-A first per-agency comparison used a broader official scope (domestic, which includes territories)
-than ours (50 states and DC), so it is indicative only: civilian agencies were within roughly 0.1%
-and the difference sat in the Department of Defense (+$10.9B as published, −$35.5B with deleted
-keys removed). Run 44086712830 (ceab87e) repeated it with identical filters (the same 51
-`place_of_performance_locations`, codes A–D, action-date window): the Department of Defense is
-+$14,824,050,391.33 (+2.996%) against a total state gap of +$14,809,601,706.12. Energy, Homeland
-Security, GSA, Transportation and Interior match to the cent; most other civilian agencies are
-within 0.3% (Commerce −0.26%, Justice −0.05%), but not all: the US Agency for Global Media is
-+$1,337,500.05 (+2.94%). The gap is therefore overwhelmingly a Defense difference between the
-archive and the live API, with small civilian gaps. The largest state gap is Arkansas (+9.60%);
-Alabama is +9.31%. The re-keyed records are a likely contributor, not a proven
-explanation, and no rule applied to the archive is adopted without an official figure from the
-same date.
+### What explains the gap (17 November 2026, Claude and Codex independently)
+
+- **Accounting (Codex, aggregate API calls only):** the gap is +$14,824,050,391.33 in Defense,
+  of which the Army is +$14,711,969,859.64. The archive rows whose surviving twin was written at
+  exactly `2026-11-04 10:11:48+00` total $14,711,969,855.64 for the Army: a residual of $4.00.
+  State by state, that batch equals the Army gap to the cent in 50 of 51 places (Virginia +$4.00).
+  DCMA's part of the same batch equals its −$3,562,088.89 gap exactly. Across all agencies the
+  batch holds $14,814,163,448.02 of in-state contracts twice, against a total gap of
+  $14,809,601,706.12. Files: Codex's `gap-investigation/`, and `deleted_key_batches` in the summary.
+- **Mechanism (Claude, award-level live checks):** 50 sampled PIIDs each match USAspending's live
+  search total exactly as either "both copies" or "one copy" of the re-keyed rows, never neither.
+  Stratified by batch (7 awards each, all pages of `/api/v2/transactions/`):
+  - 4 Nov `10:11:48`: the live search total and the live transaction records agree in all 7 awards
+    (one copy in 5, both in 2). The archive holds both, which is the gap.
+  - 2 Nov (`14:06:57`, `14:55:48`): the live search total counts both copies in all 7 awards, but
+    the live transaction records hold one copy in all 7. The archive also holds both, so the
+    archive matches the live map there.
+- **Earlier failed fix explained:** removing every deleted key also removed the 2 November copies
+  ($30.58B of in-state contracts) that the live map still counts, which is why the gap swung to
+  −$31.63B.
+
+**Proven:** the batch accounting (to $4 for the Army, state by state) and the search versus records
+disagreement for the sampled 2 November awards. **Not proven:** that every award in each batch
+behaves like its sample, why the live search still holds the 2 November copies, and the small
+civilian differences (largest relative: USAGM +2.94%).
+
+**Consequence:** neither live figure is a clean reference. The live map totals count the
+2 November duplicates; the archive counts both batches; USAspending's transaction records keep one
+copy of each sampled pair. No total on this site is "corrected": no deletion rule is applied, and
+the page lists the duplicated batches next to the gap.
 
 So the build publishes the archive as Treasury published it. Matched rows are reported
 (`deleted_key_matches`) and written to `stale-rows.parquet` for audit, but not removed; the
