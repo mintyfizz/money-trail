@@ -1250,10 +1250,25 @@
       "at": "2026-11-17T08:19:06.776018+00:00",
       "error": "Command '['curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '3', '--connect-timeout', '10', '--max-time', '30', '-H', 'Content-Type: application/json', '--data', '{\"agency\": 60, \"fiscal_year\": 2025, \"type\": \"contracts\"}', 'https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/']' returned non-zero exit status 52.",
       "stderr": "curl: (52) Empty reply from server\n"
+    },
+    {
+      "agency": 21,
+      "at": "2026-11-17T08:52:55.616790+00:00",
+      "error": "Command '['curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '3', '--connect-timeout', '10', '--max-time', '30', '-H', 'Content-Type: application/json', '--data', '{\"agency\": 21, \"fiscal_year\": 2025, \"type\": \"contracts\"}', 'https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/']' returned non-zero exit status 52."
+    },
+    {
+      "agency": 22,
+      "at": "2026-11-17T08:54:32.202162+00:00",
+      "error": "Command '['curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '3', '--connect-timeout', '10', '--max-time', '30', '-H', 'Content-Type: application/json', '--data', '{\"agency\": 22, \"fiscal_year\": 2025, \"type\": \"contracts\"}', 'https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/']' returned non-zero exit status 52."
+    },
+    {
+      "agency": 24,
+      "at": "2026-11-17T08:56:08.806812+00:00",
+      "error": "Command '['curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '3', '--connect-timeout', '10', '--max-time', '30', '-H', 'Content-Type: application/json', '--data', '{\"agency\": 24, \"fiscal_year\": 2025, \"type\": \"contracts\"}', 'https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/']' returned non-zero exit status 52."
     }
   ],
-  "stopped_at": "2026-11-17T08:23:49.689624+00:00",
-  "stop_reason": "Source returned repeated empty replies and some HTTP 500 responses; progress retained",
+  "stopped_at": "2026-11-17T08:57:45.453981+00:00",
+  "stop_reason": "Slow retry exhausted: 5-second request spacing, 30/60-second backoff; no new successful responses",
   "pending_agency_ids": [
     21,
     22,
@@ -1350,5 +1365,7 @@
     198,
     199,
     200
-  ]
+  ],
+  "resumed_at": "2026-11-17T08:51:23.080473+00:00",
+  "last_attempt_finished_at": "2026-11-17T08:56:08.809246+00:00"
 }

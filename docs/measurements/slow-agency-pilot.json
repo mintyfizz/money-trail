@@ -1,0 +1,118 @@
+{
+  "started_at": "2026-11-17T08:51:23.079559+00:00",
+  "phase": "interrupted",
+  "request_gap_seconds": 5,
+  "retry_delays_seconds": [
+    30,
+    60
+  ],
+  "reserve_gib": 8,
+  "requests": [
+    {
+      "at": "2026-11-17T08:51:23.906208+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 1,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:51:54.771029+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 2,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:52:55.615190+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 3,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:53:00.539089+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 1,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:53:31.356411+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 2,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:54:32.200070+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 3,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:54:37.137760+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 1,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:55:07.944315+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 2,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:56:08.804327+00:00",
+      "url": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+      "attempt": 3,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:56:13.773535+00:00",
+      "url": "https://files.usaspending.gov/award_data_archive/FY2025_010_Contracts_Full_20261106.zip",
+      "attempt": 1,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:56:44.604990+00:00",
+      "url": "https://files.usaspending.gov/award_data_archive/FY2025_010_Contracts_Full_20261106.zip",
+      "attempt": 2,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    },
+    {
+      "at": "2026-11-17T08:57:45.450824+00:00",
+      "url": "https://files.usaspending.gov/award_data_archive/FY2025_010_Contracts_Full_20261106.zip",
+      "attempt": 3,
+      "curl_exit": 52,
+      "error": "curl: (52) Empty reply from server"
+    }
+  ],
+  "candidates": [],
+  "free_disk_bytes_before": 23095152640,
+  "current_agency": "The Judicial Branch",
+  "current_agency_id": 8,
+  "confirmed_archives": 17,
+  "unresolved_agencies": 95,
+  "catalogue_complete": false,
+  "error": "CalledProcessError(52, ['curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '3', '--connect-timeout', '10', '--max-time', '30', '--head', '-H', 'Accept-Encoding: identity', 'https://files.usaspending.gov/award_data_archive/FY2025_010_Contracts_Full_20261106.zip'])",
+  "finished_at": "2026-11-17T08:57:45.453981+00:00",
+  "free_disk_bytes_after": 23119007744,
+  "browser_fallback": {
+    "archive_page_loaded": true,
+    "archive_choices_loaded": false,
+    "direct_zip_download": "ERR_EMPTY_RESPONSE; no download received"
+  },
+  "new_archives_confirmed": 0,
+  "completed_conversions": 0,
+  "parquet_bytes": null,
+  "parquet_to_zip_ratio": null,
+  "real_fixture_pinned": false,
+  "large_downloads_started": false,
+  "background_transfer_running": false
+}
