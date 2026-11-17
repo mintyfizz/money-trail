@@ -2,7 +2,7 @@
 
 Milestone 1 is **in progress**. The sequential downloader, text-only raw Parquet, independent CSV/read-back validation and guarded ZIP deletion are implemented; live completion remains unverified.
 
-1. Restore source access and run per-agency discovery. Do not assume why requests return empty responses. Confirm a real HTTP 206 range response with the expected source identity before relying on live resume.
+1. Resume the partial `fy2025-agencies.json` catalogue using its unresolved agency IDs; preserve the 17 successful checks out of 112 listed agencies. The latest live attempt is recorded in `live-agency-pilot-attempt.json`. Do not assume why requests return empty responses. Confirm a real HTTP 206 range response with the expected source identity before relying on live resume.
 2. Run the smallest FY2025 contract agency through `pipeline.pilot --limit 1`. Check complete raw CRC/SHA-256, full row counts, rejection records and actual Parquet size. Increase the selection only within the disk reserve.
 3. Pin the first validated nonempty agency ZIP no larger than 64 MiB as a permanent local importer fixture. Run the next few agencies, verify deletion/reuse behavior, and measure their raw Parquet sizes before expanding. Cloud storage is optional; no provider is configured.
 4. Investigate blank contract award types alongside IDV fields, and map old/new assistance categories before any business filter. The earlier ordered 10,000-row prefix is not nationally representative.

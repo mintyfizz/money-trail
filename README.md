@@ -2,7 +2,7 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: milestone 1 initiated, not complete.** Per-agency discovery, sequential resumable downloads, full ZIP verification batch Parquet conversion, independent value/count validation and guarded ZIP deletion are implemented. FY2025 national ZIP sizes were verified; a 10,000-record contract prefix was inspected. Full national downloads, assistance profiling and official-total reconciliation are still outstanding. There is no dashboard or scheduled refresh yet.
+**Status: milestone 1 initiated, not complete.** Per-agency discovery, sequential resumable downloads, full ZIP verification batch Parquet conversion, independent value/count validation and guarded ZIP deletion are implemented. FY2025 national ZIP sizes were verified; a 10,000-record contract prefix was inspected. A live discovery attempt confirmed 17 of 112 listed agencies before source failures returned; no complete agency conversion has run. Full national downloads, assistance profiling and official-total reconciliation are still outstanding. There is no dashboard or scheduled refresh yet.
 
 See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), and [next steps](docs/NEXT.md).
 
@@ -81,7 +81,7 @@ The initial national `.zip.partial` is an explicitly incomplete diagnostic prefi
 .venv/bin/python -m ingest.sample_prefix data/raw/FY2025_All_Contracts_Full_20261106.zip.partial --limit 10000 --output docs/measurements/fy2025-contracts-prefix-sample.json
 ```
 
-Live source access remains unresolved: [latest agency-discovery check](docs/measurements/retention-source-access-check.json) and [earlier range check](docs/measurements/source-access-check.json). Controlled tests establish our recovery behavior, not Treasury's current range support. No transfer is left running.
+Live source access remains intermittent: [latest catalogue/pilot attempt](docs/measurements/live-agency-pilot-attempt.json), [partial agency catalogue](docs/measurements/fy2025-agencies.json), and [earlier range check](docs/measurements/source-access-check.json). Controlled tests establish our recovery behavior, not Treasury's current range support. No transfer is left running.
 
 ## Planned pipeline
 
