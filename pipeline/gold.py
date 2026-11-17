@@ -45,7 +45,8 @@ class QualityError(RuntimeError):
 
 
 def connect(silver_dir: str | Path, deleted_keys: str | Path | None = None,
-            temp_dir: str | Path | None = None, reserve_gib: float = 8) -> duckdb.DuckDBPyConnection:
+            temp_dir: str | Path | None = None, reserve_gib: float = 8,
+            apply_deleted_keys: bool = False) -> duckdb.DuckDBPyConnection:
     # Spill to disk is limited to the space above the reserve (at most 2 GiB).
     con = duckdb_connect(temp_dir or Path(silver_dir).parent / "_duckdb_tmp", reserve_gib)
     con.execute("SET preserve_insertion_order = false")
@@ -81,7 +82,7 @@ def connect(silver_dir: str | Path, deleted_keys: str | Path | None = None,
             upper(trim(primary_place_of_performance_country_code)) AS country,
             federal_action_obligation AS amount
           FROM source s
-          WHERE NOT EXISTS (SELECT 1 FROM deleted d WHERE d.k = s.contract_transaction_unique_key)
+          {"WHERE NOT EXISTS (SELECT 1 FROM deleted d WHERE d.k = s.contract_transaction_unique_key)" if apply_deleted_keys else ""}
         )
     """)
     return con
@@ -100,8 +101,11 @@ BLOCKING = ("duplicate_keys", "other_fiscal_year", "outside_fiscal_window", "nul
 
 def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, source_zip: str, top: int = 10,
               deleted_keys: str | Path | None = None, stale_out: str | Path | None = None,
-              reserve_gib: float = 8) -> dict:
-    con = connect(silver_dir, deleted_keys, reserve_gib=reserve_gib)
+              reserve_gib: float = 8, apply_deleted_keys: bool = False) -> dict:
+    """Summarise the snapshot as published. Keys listed as deleted in the same release's delta file
+    are matched and reported for diagnosis, but only removed when `apply_deleted_keys` is set:
+    removing them was tested against USAspending's published totals and did not reconcile."""
+    con = connect(silver_dir, deleted_keys, reserve_gib=reserve_gib, apply_deleted_keys=apply_deleted_keys)
     start, end = f"{fiscal_year - 1}-10-01", f"{fiscal_year}-09-30"
     checks = con.execute(f"""
         SELECT count(*) AS rows,
@@ -164,6 +168,9 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
           FROM tx WHERE place_kind = 'state' GROUP BY state, uei)
         WHERE n <= {top} ORDER BY state, amount DESC""").fetchall()
 
+    agency_contracts = con.execute("""
+        SELECT awarding_agency_name, sum(amount) FROM tx
+        WHERE place_kind = 'state' AND type_group IN ('A', 'B', 'C', 'D') GROUP BY 1""").fetchall()
     national_agencies = con.execute(f"""
         SELECT awarding_agency_name, sum(amount) FROM tx GROUP BY 1 ORDER BY 2 DESC LIMIT {top}""").fetchall()
 
@@ -202,9 +209,11 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
             **{kind + "_cents": cents(amount) for kind, amount in places if kind != "state"},
         },
         "checks": checks,
-        "stale_rows_removed": {"rows": stale[0], "cents": cents(stale[1]),
-                               "deleted_keys_listed": deleted_listed,
-                               "reason": "Keys the same release's delta file marks as deleted"},
+        "agency_contracts_in_states": {n or "Not reported": cents(a) for n, a in agency_contracts},
+        "deleted_key_matches": {"rows": stale[0], "cents": cents(stale[1]),
+                                "deleted_keys_listed": deleted_listed, "applied": apply_deleted_keys,
+                                "meaning": ("Rows whose keys the same release's delta file lists as deleted. "
+                                            "Reported for diagnosis; not removed unless applied.")},
         "full_snapshot": {"rows": full[0], "net_obligations_cents": cents(full[1]),
                           "note": "The source file as published, before stale keys are removed"},
         "states": dict(sorted(states.items())),
@@ -219,15 +228,18 @@ def main() -> None:
     parser.add_argument("--snapshot-date", required=True)
     parser.add_argument("--source-zip", required=True)
     parser.add_argument("--deleted-keys", help="Parquet of transaction keys the delta file deletes")
-    parser.add_argument("--stale-out", help="write the removed rows here for audit")
+    parser.add_argument("--stale-out", help="write the rows matching deleted keys here for audit")
+    parser.add_argument("--apply-deleted-keys", action="store_true",
+                        help="remove matched rows (experimental; did not reconcile for FY2025)")
     parser.add_argument("--reserve-gib", type=float, default=8)
     args = parser.parse_args()
     result = summarise(args.silver_dir, args.year, args.snapshot_date, args.source_zip,
-                       deleted_keys=args.deleted_keys, stale_out=args.stale_out, reserve_gib=args.reserve_gib)
+                       deleted_keys=args.deleted_keys, stale_out=args.stale_out, reserve_gib=args.reserve_gib,
+                       apply_deleted_keys=args.apply_deleted_keys)
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(result, indent=1))
     print(json.dumps({"national_cents": result["national"]["net_obligations_cents"], "states": len(result["states"]),
-                      "checks": result["checks"], "stale_rows_removed": result["stale_rows_removed"],
+                      "checks": result["checks"], "deleted_key_matches": result["deleted_key_matches"],
                       "full_snapshot": result["full_snapshot"],
                       "outside_map": {k: v for k, v in result["outside_map"].items()
                                                                   if k != "territories"}}, indent=2))

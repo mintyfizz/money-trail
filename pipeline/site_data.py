@@ -28,7 +28,8 @@ def build(inputs: str | Path, output: str | Path) -> dict:
             state["changes"] = year_changes.get(code)
         summary["reconciliation"] = None if rec is None else {
             "official_queried_at": rec["official_queried_at"], "definition": rec["definition"],
-            **{part: {k: v for k, v in rec[part].items() if k != "rows"} for part in ("contracts", "idvs")}}
+            **{part: {k: v for k, v in rec[part].items() if k != "rows"} for part in ("contracts", "idvs")},
+            "agencies": [a for a in rec.get("agencies", []) if a["official_cents"] or a["ours_cents"]][:12]}
         summary["changes"] = None if delta is None else {
             "method": delta["method"], "meaning": delta.get("meaning"), "all_years": delta.get("all_years"),
             "source_file": delta.get("source_file"),

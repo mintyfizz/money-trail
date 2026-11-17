@@ -21,8 +21,9 @@ env:
 
 jobs:
   delta:
-    # The monthly delta file from the same release lists keys Treasury deleted. Some of them still
-    # appear in that release's full file (stale rows from re-keyed records), so they are removed.
+    # The monthly delta file from the same release lists keys Treasury deleted. Some still appear in
+    # that release's full file. They are matched and reported as a diagnostic, not removed: removing
+    # them did not reconcile with USAspending's published totals (decision 005).
     # The delta ZIP and the deleted keys are preserved in their own verified release.
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -161,7 +162,7 @@ jobs:
           keys_sha=$(sha256sum delta/deleted-keys.parquet | cut -d' ' -f1)
           python -m pipeline.release --repository "$GITHUB_REPOSITORY" --tag "$tag" \
             --title "FY${{ matrix.year }} national contracts, source snapshot ${DATE}, code ${GITHUB_SHA::7}" \
-            --notes "Original Treasury archive, the typed transaction layer built from it by commit ${GITHUB_SHA}, and the stale rows removed before counting. Removed keys come from deleted-keys.parquet (sha256 ${keys_sha}) in release ${DELTA_TAG}." \
+            --notes "Original Treasury archive, the typed transaction layer built from it by commit ${GITHUB_SHA}, and stale-rows.parquet: rows whose keys the same release's delta lists as deleted (diagnostic only, not removed from the totals). Keys come from deleted-keys.parquet (sha256 ${keys_sha}) in release ${DELTA_TAG}." \
             --manifest out/release-fy${{ matrix.year }}.json \
             "data/zip/$NAME" data/sha256.txt data/silver/_extract.json data/stale-rows.parquet data/silver/part-*.parquet
       - uses: actions/upload-artifact@v4

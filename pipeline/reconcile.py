@@ -115,6 +115,30 @@ def compare(ours: dict, official: dict) -> dict:
     }
 
 
+CATEGORY = "https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/"
+
+
+def official_by_agency(year: int) -> dict:
+    """Published contract totals (A-D) by awarding agency, domestic place of performance."""
+    body = {"spending_level": "transactions", "limit": 100,
+            "filters": {"time_period": [fiscal_window(year)], "award_type_codes": CONTRACT_CODES,
+                        "place_of_performance_scope": "domestic"}}
+    results = post(CATEGORY, body)["results"]
+    return {r["name"]: int((Decimal(str(r["amount"])) * 100).quantize(Decimal("1"))) for r in results}
+
+
+def compare_agencies(ours: dict, official: dict) -> list[dict]:
+    """Diagnostic only: which agencies carry a state-level gap. The official domestic scope includes
+    territories, so small differences are expected; large ones point at the cause."""
+    rows = []
+    for name in sorted(set(ours) | set(official), key=lambda n: -(official.get(n) or ours.get(n) or 0)):
+        mine, theirs = ours.get(name), official.get(name)
+        gap = None if mine is None or theirs is None else mine - theirs
+        rows.append({"agency": name, "ours_cents": mine, "official_cents": theirs, "gap_cents": gap,
+                     "gap_pct": float(round(Decimal(100 * gap) / theirs, 4)) if gap is not None and theirs else None})
+    return rows
+
+
 def reconcile(summary: dict) -> dict:
     year = summary["fiscal_year"]
     contracts = official_by_state(year, CONTRACT_CODES)
@@ -130,6 +154,7 @@ def reconcile(summary: dict) -> dict:
         "contracts": compare(ours_by_state(summary, set(CONTRACT_CODES)), contracts),
         "idvs": compare(ours_by_state(summary, {"IDV"}), idvs),
         "population": population,
+        "agencies": compare_agencies(summary.get("agency_contracts_in_states", {}), official_by_agency(year)),
     }
 
 

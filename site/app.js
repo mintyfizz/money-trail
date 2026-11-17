@@ -315,10 +315,17 @@
       return `<li>FY${y}: check <strong>${words[c.status] || c.status}</strong>. For the ${compared} of 51 places compared, this project totals ${money(c.total_ours_cents)} against USAspending's ${money(c.total_official_cents)} (${c.total_gap_pct === null ? "no percentage" : d3.format("+.3f")(c.total_gap_pct) + "%"}). ${c.states_within_1_pct} places are within 1%, ${c.states_within_0_1_pct} within 0.1%.</li>`;
     });
     $("reconciliation").innerHTML = `<p>Each state's contract total is compared with USAspending's own published figure, using the same dates, place and contract types. The check passes only if all 51 places are present, the national gap is within 0.1% and every place is within 1%. USAspending's figures are live, so records updated after the archive was made can open small gaps.</p><ul>${parts.join("")}</ul>`;
+    const latest = yearData().reconciliation;
+    const agencies = latest && latest.agencies ? latest.agencies.filter((a) => a.gap_cents !== null) : [];
+    if (agencies.length) {
+      const big = agencies.filter((a) => Math.abs(a.gap_cents) >= 100000000 * 100);
+      const rest = agencies.filter((a) => Math.abs(a.gap_cents) < 100000000 * 100);
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p>By agency, ${rest.length} of the ${agencies.length} largest agencies are within $100 million of USAspending's figure. ${big.length ? `The gap sits in ${big.map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : ""}</p>`);
+    }
     const d = yearData();
-    const stale = d.stale_rows_removed;
-    const cleaned = stale && stale.rows
-      ? ` Before counting, ${d3.format(",")(stale.rows)} stale rows (${money(stale.cents)}) were removed: their keys are listed as deleted in Treasury's delta file of the same date. As published, the file totals ${money(d.full_snapshot.net_obligations_cents)}.`
+    const matches = d.deleted_key_matches;
+    const cleaned = matches && matches.rows && !matches.applied
+      ? ` Figures are the archive as published. It contains ${d3.format(",")(matches.rows)} rows (${money(matches.cents)}) whose keys Treasury's delta file of the same date lists as deleted; they are counted, because removing them did not match USAspending's published totals either.`
       : "";
     $("source").textContent = `Source: Treasury's national contracts archive for fiscal year ${d.fiscal_year} (${d.source_zip}, snapshot ${d.snapshot_date}).${cleaned} Summaries generated ${d.generated_at.slice(0, 10)}.`;
   }

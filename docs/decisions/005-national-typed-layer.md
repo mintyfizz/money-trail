@@ -26,17 +26,28 @@ Every typed row keeps `federal_action_obligation_raw`, `action_date_raw`, `sourc
 - Releases are created as drafts, every asset's size and SHA-256 is checked against the runner's
   files, and only then published. An existing tag is never overwritten; tags carry the code SHA.
 
-## Stale keys in the full file
+## Re-keyed rows: observed, not corrected
 
 The 2026-11-06 FY2025 full file contains transactions whose keys Treasury re-issued on
-2026-11-04 (transaction number 2 became 14, 1 became 16) alongside the new keys. USAspending's
-live API lists only the new keys. Alabama's +$1.92B reconciliation gap was entirely Army delivery
-orders of this kind (example award `CONT_AWD_W31P4Q25F0017_9700_W31P4Q22D0004_9700`).
+2026-11-04 (transaction number 2 became 14, 1 became 16) next to the new keys. For example award
+`CONT_AWD_W31P4Q25F0017_9700_W31P4Q22D0004_9700`, USAspending's published total ($471,159,233.07)
+counts only the new keys; the archive holds both ($942,318,466.14).
 
-The same release's delta file lists deleted keys. The build removes those keys from the full file
-and reports how many rows and how many cents were removed. The delta and full file must carry the
-same snapshot date. Dropping repeated actions by key prefix was tested and rejected: most repeated
-actions under one modification are legitimate, and that rule removed $66.4B.
+The same release's delta file lists 112,572 deleted keys; 19,239 of them appear in the FY2025 full
+file ($49.68B). Every one of the 19,206 that has a twin is the older copy. Removing them was tested
+and **rejected**: the 50-state-and-DC gap on contract codes A–D moved from +$14.81B to −$31.63B
+(independent check by Codex, `stale-key-independent-check.json`; reproduced here). Restricting the
+removal to rows with a live twin gave the same result.
+
+By agency, every civilian agency matches USAspending within roughly 0.1%; the entire gap is the
+Department of Defense: +$10.9B as published, −$35.5B with the deleted keys removed. USAspending's
+live Defense figure counts both copies for some re-keyed pairs and one for others, and no rule
+applied to the archive reproduces it without an official figure from the same date.
+
+So the build publishes the archive as Treasury published it. Matched rows are reported
+(`deleted_key_matches`) and written to `stale-rows.parquet` for audit, but not removed; the
+reconciliation shows `gaps` with the agency breakdown. `--apply-deleted-keys` remains an
+experimental option, off by default.
 
 ## Reconciliation rule
 

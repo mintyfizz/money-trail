@@ -111,7 +111,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result["checks"], {"rows": 9, "duplicate_keys": 0, "other_fiscal_year": 0,
                                             "outside_fiscal_window": 0, "null_obligations": 0, "null_dates": 0,
                                             "negative_rows": 1})
-        self.assertEqual(result["stale_rows_removed"]["rows"], 0)
+        self.assertEqual(result["deleted_key_matches"]["rows"], 0)
 
     def test_summary_awards_and_recipients(self):
         result = gold.summarise(self.root / "silver", 2025, "2026-11-06", self.zip.name)
@@ -130,6 +130,8 @@ class BuildTests(unittest.TestCase):
         summary = gold.summarise(self.root / "silver", 2025, "2026-11-06", self.zip.name)
         def fake_post(url, body):
             codes = body["filters"]["award_type_codes"]
+            if "geo_layer" not in body:
+                return {"results": [{"name": "Department of Defense", "amount": 1100.05}]}
             if codes == reconcile.CONTRACT_CODES:
                 return {"results": [{"shape_code": "CA", "aggregated_amount": 810.05, "population": 100},
                                     {"shape_code": "TX", "aggregated_amount": 790.0, "population": 50},
@@ -144,6 +146,8 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result["contracts"]["largest_gaps"][0]["state"], "TX")
         self.assertEqual(result["contracts"]["status"], "incomplete")  # fixture has only 3 of 51 places
         self.assertEqual(result["population"], {"CA": 100, "TX": 50})
+        dod = next(a for a in result["agencies"] if a["agency"] == "Department of Defense")
+        self.assertEqual((dod["ours_cents"], dod["official_cents"], dod["gap_cents"]), (111005, 110005, 1000))
         self.assertEqual(result["definition"]["time_period"], {"start_date": "2024-10-01", "end_date": "2025-09-30",
                                                                "date_type": "action_date"})
         self.assertEqual(result["definition"]["spending_level"], "transactions")
@@ -237,15 +241,17 @@ class BuildTests(unittest.TestCase):
         with self.assertRaisesRegex(gold.QualityError, "outside_fiscal_window"):
             gold.summarise(out, 2025, "2026-11-06", "x.zip")
 
-    def test_stale_keys_from_delta_are_removed_and_reported(self):
+    def test_deleted_keys_are_reported_and_only_removed_on_request(self):
         import pyarrow as pa, pyarrow.parquet as pq
         out = self.summary_of([row("OLD_2", "440.00"), row("NEW_14", "440.00"), row("X", "10.00", state="TX")])
         deleted = self.root / "deleted.parquet"
         pq.write_table(pa.table({"contract_transaction_unique_key": ["OLD_2", "NOT_PRESENT"]}), deleted)
-        result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted)
+        reported = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted)
+        self.assertEqual(reported["states"]["CA"]["net_obligations_cents"], 88000)  # as published by default
+        self.assertEqual(reported["deleted_key_matches"], {"rows": 1, "cents": 44000, "deleted_keys_listed": 2,
+                         "applied": False, "meaning": reported["deleted_key_matches"]["meaning"]})
+        result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted, apply_deleted_keys=True)
         self.assertEqual(result["states"]["CA"]["net_obligations_cents"], 44000)
-        self.assertEqual(result["stale_rows_removed"]["rows"], 1)
-        self.assertEqual(result["stale_rows_removed"]["cents"], 44000)
 
     def test_reconcile_never_skips_a_state(self):
         ours = {"CA": 10000}
@@ -323,7 +329,7 @@ class BuildTests(unittest.TestCase):
         audit = self.root / "stale.parquet"
         result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted, stale_out=audit)
         self.assertEqual(result["full_snapshot"]["net_obligations_cents"], 88000)
-        self.assertEqual(result["national"]["net_obligations_cents"], 44000)
+        self.assertEqual(result["national"]["net_obligations_cents"], 88000)
         rows = pq.read_table(audit).to_pylist()
         self.assertEqual([r["contract_transaction_unique_key"] for r in rows], ["OLD_2"])
         self.assertEqual(rows[0]["source_row"], 2)
