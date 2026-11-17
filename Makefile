@@ -1,3 +1,4 @@
 .PHONY: test
+PYTHON ?= .venv/bin/python
 test:
-	python3 -m unittest discover -s tests -v
+	$(PYTHON) -m unittest discover -s tests -v

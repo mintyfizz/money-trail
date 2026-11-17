@@ -7,13 +7,18 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import csv
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import io
 from itertools import islice
 import json
+import fcntl
+import math
+import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import time
@@ -21,7 +26,9 @@ from urllib.parse import urlparse
 import zipfile
 
 API = "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/"
+AGENCIES_API = "https://api.usaspending.gov/api/v2/bulk_download/list_agencies/"
 GIB = 1024**3
+MIB = 1024**2
 
 
 def now():
@@ -36,12 +43,11 @@ def save_json(path, value):
     temp.replace(path)
 
 
-def curl(*args, timeout=120):
+def curl(*args, timeout=30):
     return subprocess.run(
         ["curl", "--fail", "--silent", "--show-error", "--location",
-         "--proto", "=https", "--proto-redir", "=https", "--retry", "2", "--retry-all-errors",
-         "--retry-max-time", "60",
-         "--connect-timeout", "20", "--max-time", str(timeout), *map(str, args)],
+         "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "3",
+         "--connect-timeout", "10", "--max-time", str(timeout), *map(str, args)],
         check=True, capture_output=True,
     ).stdout
 
@@ -56,12 +62,21 @@ def archive_url(url):
     return url
 
 
-def head(url):
-    raw = curl("--head", archive_url(url)).decode()
+def parse_headers(raw):
     blocks = [block for block in raw.replace("\r\n", "\n").split("\n\n")
               if block.startswith("HTTP/")]
+    if not blocks:
+        raise RuntimeError("No HTTP response headers received")
+    status = int(blocks[-1].splitlines()[0].split()[1])
     headers = dict(line.split(":", 1) for line in blocks[-1].splitlines()[1:] if ":" in line)
     headers = {key.lower(): value.strip() for key, value in headers.items()}
+    return status, headers
+
+
+def head(url):
+    status, headers = parse_headers(curl("--head", "-H", "Accept-Encoding: identity", archive_url(url)).decode())
+    if status != 200:
+        raise RuntimeError(f"Unexpected HEAD status: {status}")
     size = int(headers["content-length"])
     if size <= 0:
         raise ValueError("Archive has no positive content length")
@@ -69,31 +84,78 @@ def head(url):
             "last_modified": headers.get("last-modified")}
 
 
-def discover(years, agency="all", output=None):
-    records = []
-    for year in years:
-        for kind in ("contracts", "assistance"):
-            payload = {"agency": agency, "fiscal_year": year, "type": kind}
-            result = json.loads(curl("-H", "Content-Type: application/json",
-                                     "--data", json.dumps(payload), API))
-            matches = [r for r in result["monthly_files"]
-                       if r["fiscal_year"] == year and r["type"] == kind
-                       and "_Full_" in r["file_name"]]
-            if len(matches) != 1:
-                raise ValueError(f"Expected exactly one full file: {payload}, got {len(matches)}")
-            record = matches[0]
-            record["http"] = head(record["url"])
-            record["discovered_at"] = now()
-            record["delta_files"] = [r for r in result["monthly_files"] if "_Delta_" in r["file_name"]]
-            records.append(record)
-            if output:
-                save_json(output, {"api": API, "retrieved_at": now(), "agency": agency,
-                                   "complete": False, "files": records})
-            print(f"FY{year} {kind}: {record['http']['bytes']:,} bytes", flush=True)
-    return {"api": API, "retrieved_at": now(), "agency": agency, "complete": True, "files": records}
+def list_agencies():
+    response = json.loads(curl("-H", "Content-Type: application/json", "--data",
+                               json.dumps({"type": "award_agencies", "agency": 0}), AGENCIES_API))
+    unique = {}
+    for group in response["agencies"].values():
+        for agency in group:
+            unique[int(agency["toptier_agency_id"])] = agency
+    if not unique:
+        raise ValueError("Source returned no selectable agencies")
+    return [unique[key] for key in sorted(unique)]
+
+
+def discover(years, agency=None, output=None, agency_ids=None, kinds=("contracts", "assistance")):
+    """Sequential, checkpointed discovery. No national/agency mixtures or coverage claim."""
+    catalog = {"api": API, "retrieved_at": now(), "complete": False,
+               "national_coverage_verified": False, "files": [], "checks": []}
+    def checkpoint():
+        if output:
+            save_json(output, catalog)
+    checkpoint()
+    try:
+        if agency is not None and agency_ids is not None:
+            raise ValueError("Select an agency, agency IDs, or automatic per-agency discovery")
+        if agency is not None:
+            agencies = [{"toptier_agency_id": agency}]
+        elif agency_ids is not None:
+            agencies = [{"toptier_agency_id": key} for key in sorted(set(agency_ids))]
+        else:
+            agencies = list_agencies()
+        catalog["agencies"] = agencies
+        for selected in agencies:
+            selected_id = selected["toptier_agency_id"]
+            for year in years:
+                for kind in kinds:
+                    payload = {"agency": selected_id, "fiscal_year": year, "type": kind}
+                    result = json.loads(curl("-H", "Content-Type: application/json",
+                                             "--data", json.dumps(payload), API))
+                    matches = [r for r in result["monthly_files"]
+                               if r["fiscal_year"] == year and r["type"] == kind
+                               and "_Full_" in r["file_name"]]
+                    if len(matches) > 1:
+                        raise ValueError(f"Ambiguous full archive for {payload}")
+                    if not matches:
+                        catalog["checks"].append({**payload, "status": "no_archive_returned"})
+                        checkpoint()
+                        continue
+                    record = matches[0]
+                    if selected_id != "all" and (record["agency_name"] == "All" or "_All_" in record["file_name"]):
+                        raise ValueError("National archive returned for an agency request; refusing overlap")
+                    record["agency_id"] = selected_id
+                    record["http"] = head(record["url"])
+                    record["discovered_at"] = now()
+                    record["delta_files"] = [r for r in result["monthly_files"] if "_Delta_" in r["file_name"]]
+                    if any(r["url"] == record["url"] for r in catalog["files"]):
+                        raise ValueError("Same archive returned for multiple requested slices")
+                    catalog["files"].append(record)
+                    catalog["checks"].append({**payload, "status": "available"})
+                    checkpoint()
+                    print(f"{record['agency_name']} FY{year} {kind}: {record['http']['bytes']:,} bytes", flush=True)
+        catalog["files"].sort(key=lambda item: item["http"]["bytes"])
+        catalog["complete"] = True
+    except Exception as error:
+        catalog["error"] = str(error)
+        checkpoint()
+        raise
+    checkpoint()
+    return catalog
 
 
 def ensure_space(directory, additional_bytes, reserve_bytes):
+    if not math.isfinite(reserve_bytes) or reserve_bytes < 0 or additional_bytes < 0:
+        raise ValueError("Space requirements must be finite and nonnegative")
     free = shutil.disk_usage(directory).free
     if free - additional_bytes < reserve_bytes:
         raise RuntimeError(f"Insufficient disk space: {free / GIB:.2f} GiB free; "
@@ -105,16 +167,78 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def download(record, directory, reserve_gib=8):
+@contextmanager
+def exclusive_lock(path):
+    with Path(path).open("a+b") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError(f"Another process is using {path}") from None
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def verify_zip(path):
+    with zipfile.ZipFile(path) as archive:
+        members = archive.infolist()
+        names = [info.filename for info in members if not info.is_dir()]
+        if len(names) != len(set(names)):
+            raise ValueError("Duplicate ZIP member names")
+        if not any(name.lower().endswith(".csv") for name in names):
+            raise ValueError("Archive does not contain CSV data")
+        bad = archive.testzip()
+        if bad:
+            raise zipfile.BadZipFile(f"CRC failure: {bad}")
+        return {"members": len(names), "uncompressed_bytes": sum(info.file_size for info in members)}
+
+
+def verified_receipt(path):
+    path = Path(path)
+    if path.suffix != ".zip":
+        raise ValueError("Only a completed .zip may be processed")
+    receipt = json.loads(Path(str(path) + ".receipt.json").read_text())
+    if (receipt.get("zip_crc_status") != "verified" or path.stat().st_size != receipt["bytes"]
+            or sha256(path) != receipt["sha256"]):
+        raise RuntimeError("Raw ZIP does not match a verified integrity receipt")
+    return receipt
+
+
+def fetch_range(url, start, end, etag, body, headers):
+    """One bounded attempt. Never append a server response directly to the checkpoint."""
+    Path(body).write_bytes(b"")
+    Path(headers).write_bytes(b"")
+    return subprocess.run([
+        "curl", "--fail", "--silent", "--show-error", "--location", "--max-redirs", "3",
+        "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "10", "--max-time", "120",
+        "-H", "Accept-Encoding: identity", "-H", "If-Match: " + etag,
+        "--range", f"{start}-{end}", "--max-filesize", str(end - start + 1),
+        "--dump-header", str(headers), "--output", str(body), archive_url(url),
+    ], capture_output=True)
+
+
+class DownloadInterrupted(RuntimeError):
+    pass
+
+
+def download(record, directory, reserve_gib=8, chunk_mib=8):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
+    if not math.isfinite(reserve_gib) or reserve_gib < 0 or not math.isfinite(chunk_mib) or chunk_mib <= 0:
+        raise ValueError("Invalid disk reserve or chunk size")
     url = archive_url(record["url"])
     name = record["file_name"]
     if Path(name).name != name or name != Path(urlparse(url).path).name:
         raise ValueError("Unsafe or inconsistent archive filename")
+    with exclusive_lock(directory / (name + ".lock")):
+        return _download(record, directory, reserve_gib, max(1, int(chunk_mib * MIB)))
+
+
+def _download(record, directory, reserve_gib, chunk_bytes):
+    name, url, expected = record["file_name"], record["url"], record["http"]
     target = directory / name
     receipt_path = directory / (name + ".receipt.json")
-    expected = record["http"]
     if target.exists():
         if not receipt_path.exists():
             raise RuntimeError(f"Existing file has no download receipt: {target}")
@@ -123,31 +247,76 @@ def download(record, directory, reserve_gib=8):
                 or receipt["url"] != url or receipt["etag"] != expected.get("etag")
                 or sha256(target) != receipt["sha256"]):
             raise RuntimeError(f"Existing file does not match manifest/receipt: {target}")
+        if receipt.get("zip_crc_status") != "verified":
+            receipt["zip"] = verify_zip(target)
+            receipt["zip_crc_status"] = "verified"
+            save_json(receipt_path, receipt)
         return target
     if head(url) != expected:
         raise RuntimeError("Source metadata changed; rediscover before downloading")
-    ensure_space(directory, expected["bytes"], int(reserve_gib * GIB))
-    partial = target.with_suffix(".zip.partial")
+    etag = expected.get("etag")
+    if not etag or not re.fullmatch(r'"[^"\r\n]+"', etag):
+        raise RuntimeError("Safe resume requires a strong quoted ETag; refusing weak or missing identity")
+    partial = directory / (name + ".part")
+    state_path = directory / (name + ".part.json")
+    body_path = directory / (name + ".part.chunk")
+    headers_path = directory / (name + ".part.headers")
+    identity = {"url": url, **expected}
+    if partial.exists() != state_path.exists():
+        raise RuntimeError("Partial file and resume metadata must both exist; old .partial files are not adopted")
     if partial.exists():
-        raise RuntimeError(f"Incomplete previous transfer retained at {partial}; inspect before retry")
-    print(f"Downloading {name}", flush=True)
+        state = json.loads(state_path.read_text())
+        if (state["identity"] != identity or partial.stat().st_size != state["committed_bytes"]
+                or sha256(partial) != state["prefix_sha256"]):
+            raise RuntimeError("Partial bytes or source identity differ from the saved checkpoint")
+    else:
+        partial.touch(exist_ok=False)
+        save_json(state_path, {"identity": identity, "committed_bytes": 0, "prefix_sha256": sha256(partial)})
+    if partial.stat().st_size > expected["bytes"]:
+        raise RuntimeError("Partial file exceeds expected archive size")
+    digest = hashlib.sha256()
+    with partial.open("rb") as stream:
+        while block := stream.read(MIB):
+            digest.update(block)
     started = time.monotonic()
-    arguments = ["--output", partial, "--max-filesize", expected["bytes"]]
-    if expected.get("etag"):
-        arguments += ["-H", "If-Match: " + expected["etag"]]
-    curl(*arguments, url, timeout=1200)
-    if partial.stat().st_size != expected["bytes"]:
-        raise RuntimeError("Downloaded size differs from manifest; partial file retained")
-    with zipfile.ZipFile(partial) as archive:
-        if not archive.infolist() or not any(i.filename.lower().endswith(".csv") for i in archive.infolist()):
-            raise RuntimeError("Archive does not contain CSV data")
-    digest = sha256(partial)
-    partial.replace(target)
-    receipt = {"url": url, **expected, "sha256": digest,
+    while (start := partial.stat().st_size) < expected["bytes"]:
+        end = min(start + chunk_bytes, expected["bytes"]) - 1
+        ensure_space(directory, 2 * (end - start + 1) + MIB, int(reserve_gib * GIB))
+        print(f"{name}: requesting bytes {start:,}–{end:,}", flush=True)
+        response = fetch_range(url, start, end, etag, body_path, headers_path)
+        try:
+            status, headers = parse_headers(headers_path.read_text())
+        except RuntimeError:
+            raise DownloadInterrupted(f"No usable response; {start:,} checkpointed bytes retained. "
+                                      + response.stderr.decode(errors="replace").strip()) from None
+        if (status != 206 or headers.get("content-range") != f"bytes {start}-{end}/{expected['bytes']}"
+                or headers.get("etag") != etag or headers.get("content-encoding", "identity") != "identity"
+                or ("content-length" in headers and int(headers["content-length"]) != end - start + 1)):
+            raise RuntimeError(f"Unsafe range response (HTTP {status}); no bytes appended")
+        received = body_path.stat().st_size
+        if response.returncode not in (0, 18, 28, 56) or not 0 < received <= end - start + 1:
+            raise DownloadInterrupted(f"Transfer failed; {start:,} checkpointed bytes retained")
+        ensure_space(directory, received + MIB, int(reserve_gib * GIB))
+        with partial.open("ab") as output, body_path.open("rb") as source:
+            while block := source.read(MIB):
+                output.write(block)
+                digest.update(block)
+            output.flush()
+            os.fsync(output.fileno())
+        save_json(state_path, {"identity": identity, "committed_bytes": start + received,
+                               "prefix_sha256": digest.hexdigest()})
+        body_path.unlink()
+        headers_path.unlink()
+        if response.returncode or received != end - start + 1:
+            raise DownloadInterrupted(f"Connection interrupted; {start + received:,} bytes saved. Rerun to resume.")
+    zip_info = verify_zip(partial)
+    receipt = {"url": url, **expected, "sha256": digest.hexdigest(),
                "retrieved_at": now(), "elapsed_seconds": round(time.monotonic() - started, 2),
-               "zip_crc_status": "pending complete profile read"}
+               "zip_crc_status": "verified", "zip": zip_info}
     save_json(receipt_path, receipt)
-    print(f"Saved {name}: SHA-256 {digest}", flush=True)
+    partial.replace(target)
+    state_path.unlink()
+    print(f"Verified {name}: SHA-256 {digest.hexdigest()}", flush=True)
     return target
 
 
@@ -241,35 +410,54 @@ def profile(path):
                             "business-rule validity beyond the reported checks"]}
 
 
+def select_records(records, kind=None, limit=None):
+    selected = [record for record in records if not kind or record["type"] == kind]
+    if not selected:
+        raise ValueError("No matching archives in manifest")
+    if len({record["url"] for record in selected}) != len(selected):
+        raise ValueError("Duplicate source archives in manifest")
+    national = ["_All_" in record["file_name"] for record in selected]
+    if any(national) and not all(national):
+        raise ValueError("National and per-agency inputs overlap; use separate manifests")
+    selected.sort(key=lambda record: record["http"]["bytes"])
+    if limit is not None:
+        if limit < 1:
+            raise ValueError("File limit must be positive")
+        selected = selected[:limit]
+    return selected
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     discover_cmd = commands.add_parser("discover")
     discover_cmd.add_argument("--years", type=int, nargs="+", default=[2025])
-    discover_cmd.add_argument("--agency", default="all")
+    agency_selection = discover_cmd.add_mutually_exclusive_group()
+    agency_selection.add_argument("--agency", help="Agency database ID, or explicitly 'all' for national files")
+    agency_selection.add_argument("--agency-ids", type=int, nargs="+", help="A bounded list of agency database IDs")
+    discover_cmd.add_argument("--kind", choices=["contracts", "assistance"])
     discover_cmd.add_argument("--output", type=Path, required=True)
     download_cmd = commands.add_parser("download")
     download_cmd.add_argument("--manifest", type=Path, required=True)
     download_cmd.add_argument("--directory", type=Path, default=Path("data/raw"))
     download_cmd.add_argument("--reserve-gib", type=float, default=8)
     download_cmd.add_argument("--kind", choices=["contracts", "assistance"])
+    download_cmd.add_argument("--chunk-mib", type=float, default=8)
+    download_cmd.add_argument("--limit", type=int, help="Download at most this many files, smallest first")
     profile_cmd = commands.add_parser("profile")
     profile_cmd.add_argument("archive", type=Path)
     profile_cmd.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "discover":
-        agency = args.agency if args.agency == "all" else int(args.agency)
-        save_json(args.output, discover(args.years, agency, args.output))
+        agency = args.agency if args.agency in (None, "all") else int(args.agency)
+        kinds = [args.kind] if args.kind else ("contracts", "assistance")
+        discover(args.years, agency, args.output, args.agency_ids, kinds)
     elif args.command == "download":
         records = json.loads(args.manifest.read_text())["files"]
-        selected = [r for r in records if not args.kind or r["type"] == args.kind]
-        if not selected:
-            raise ValueError("No matching archives in manifest")
+        selected = select_records(records, args.kind, args.limit)
         args.directory.mkdir(parents=True, exist_ok=True)
-        required = sum(r["http"]["bytes"] for r in selected if not (args.directory / r["file_name"]).exists())
-        ensure_space(args.directory, required, int(args.reserve_gib * GIB))
         for record in selected:
-            download(record, args.directory, args.reserve_gib)
+            download(record, args.directory, args.reserve_gib, args.chunk_mib)
     else:
         result = profile(args.archive)
         save_json(args.output, result)

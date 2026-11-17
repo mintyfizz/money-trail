@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -87,18 +88,20 @@ class ArchiveTests(unittest.TestCase):
         data = payload.getvalue()
         record = {'url': 'https://files.usaspending.gov/award_data_archive/sample.zip',
                   'file_name': 'sample.zip',
-                  'http': {'bytes': len(data), 'etag': 'version-1', 'last_modified': 'date'}}
-        def transfer(*args, **kwargs):
-            Path(args[args.index('--output') + 1]).write_bytes(data)
-            return b''
+                  'http': {'bytes': len(data), 'etag': '"version-1"', 'last_modified': 'date'}}
+        def transfer(url, start, end, etag, body, headers):
+            Path(body).write_bytes(data[start:end + 1])
+            Path(headers).write_text(f'HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{end}/{len(data)}\r\nETag: {etag}\r\n\r\n')
+            return subprocess.CompletedProcess([], 0, b'', b'')
         with tempfile.TemporaryDirectory() as directory:
-            with patch('ingest.archive.head', return_value=record['http']), patch('ingest.archive.curl', side_effect=transfer) as request:
+            with patch('ingest.archive.head', return_value=record['http']), patch('ingest.archive.fetch_range', side_effect=transfer) as request:
                 first = download(record, directory, reserve_gib=0)
                 second = download(record, directory, reserve_gib=0)
                 self.assertEqual(first, second)
                 self.assertEqual(request.call_count, 1)
                 self.assertEqual(profile(first)['rows'], 1)
                 self.assertTrue(Path(str(first) + '.receipt.json').exists())
+                self.assertEqual(json.loads(Path(str(first) + '.receipt.json').read_text())['zip_crc_status'], 'verified')
 
     def test_prefix_sample_is_explicitly_incomplete(self):
         with tempfile.TemporaryDirectory() as directory:

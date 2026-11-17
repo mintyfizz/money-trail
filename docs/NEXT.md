@@ -1,12 +1,12 @@
 # Next work
 
-Milestone 1 is **in progress**, not complete.
+Milestone 1 is **in progress**. The sequential downloader and Arrow processing path are implemented; live completion remains unverified.
 
-1. When source access recovers, rediscover FY2025 archives. Preserve the interrupted contract prefix separately before retrying a full transfer. Keep an 8 GiB disk reserve. Download one file at a time and profile without extracting CSVs.
-2. Finish full contracts and assistance row/column/size counts. Record CSV expansion and later Parquet size; do not extrapolate rows from the ordered prefix sample. Validate ZIP CRCs and reconcile valid plus rejected records with parsed records.
-3. Investigate the 479 blank contract `award_type_code` values in the sample, alongside `award_or_idv_flag` and IDV fields, before fixing a prime-contract filter. Profile all assistance category codes/descriptions, including 2026 changes, before defining grants/cooperative agreements.
-4. Decide storage for a full backfill from measured compressed, Parquet, scratch and two-snapshot requirements. Current disk capacity is sufficient for bounded sampling but not the proposed full-history lakehouse.
-5. Implement the FY2025 contract transaction table with explicit schema and decimal amounts. Quarantine invalid records, retain leading-zero geography codes, and check uniqueness of the supplied transaction key.
-6. Reconcile one agency and three geographic slices using aligned official transaction filters and snapshot dates. Build a small nominal-obligation state summary only after explaining all material differences.
+1. Restore source access and run per-agency discovery. Do not assume why requests return empty responses. Confirm a real HTTP 206 range response with the expected source identity before relying on live resume.
+2. Run the smallest FY2025 contract agency through `pipeline.pilot --limit 1`. Check complete raw CRC/SHA-256, full row counts, rejection records and actual Parquet size. Increase the selection only within the disk reserve.
+3. Select the raw-snapshot destination. Google Drive can support a small free pilot if enough of its shared quota is available; R2 has a free allowance with billable overages. No provider is configured yet. Keep ZIPs until a remote copy is verified.
+4. Investigate blank contract award types alongside IDV fields, and map old/new assistance categories before any business filter. The earlier ordered 10,000-row prefix is not nationally representative.
+5. Create typed transaction tables from the preserved Parquet source layer, retaining original financial strings and flagged anomalies. Check transaction-key uniqueness and geographic coverage.
+6. Reconcile one agency and three geographic slices with official transaction totals using aligned filters and snapshot dates. Extend scope after explaining material differences.
 
-No scheduler, public site or social post is active. Dagster scheduling belongs after idempotent ingestion, storage and reconciliation are verified.
+No scheduler, public site or social post is active. No raw ZIP is automatically deleted or uploaded.

@@ -1,0 +1,9 @@
+{
+  "api": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+  "retrieved_at": "2026-11-17T07:17:04.662361+00:00",
+  "complete": false,
+  "national_coverage_verified": false,
+  "files": [],
+  "checks": [],
+  "error": "Command '['curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '3', '--connect-timeout', '10', '--max-time', '30', '-H', 'Content-Type: application/json', '--data', '{\"type\": \"award_agencies\", \"agency\": 0}', 'https://api.usaspending.gov/api/v2/bulk_download/list_agencies/']' returned non-zero exit status 52."
+}
