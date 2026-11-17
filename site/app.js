@@ -318,6 +318,11 @@
       return `<li>FY${y}: check <strong>${words[c.status] || c.status}</strong>. For the ${compared} of 51 places compared, this project totals ${money(c.total_ours_cents)} against USAspending's ${money(c.total_official_cents)} (${c.total_gap_pct === null ? "no percentage" : d3.format("+.3f")(c.total_gap_pct) + "%"}). ${c.states_within_1_pct} places are within 1%, ${c.states_within_0_1_pct} within 0.1%.</li>`;
     });
     $("reconciliation").innerHTML = `<p>Each state's contract total is compared with USAspending's own published figure, using the same dates, place and contract types. The check passes only if all 51 places are present, the national gap is within 0.1% and every place is within 1%. USAspending's figures are live, so records updated after the archive was made can open small gaps.</p><ul>${parts.join("")}</ul>`;
+    const batches = (yearData().deleted_key_batches || []).filter((b) => Math.abs(b.state_contract_cents) >= 100 * 1e6 * 100);
+    if (batches.length) {
+      const fmtTime = (t) => t ? t.replace(/\+00$/, " UTC") : "no surviving copy";
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Treasury re-issued the keys of many Defense transactions in early November 2026, and this archive holds both the old and the new copy of each. Grouped by when the new copy was written, the duplicated contract amounts in the 50 states and DC are: ${batches.map((b) => `${esc(fmtTime(b.twin_last_modified))}, ${money(b.state_contract_cents)} (${d3.format(",")(b.state_contract_rows)} rows)`).join("; ")}. The figures on this page still count both copies.</p>`);
+    }
     const latest = yearData().reconciliation;
     const agencies = latest && latest.agencies ? latest.agencies.filter((a) => a.gap_cents !== null) : [];
     if (agencies.length) {
