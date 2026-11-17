@@ -33,7 +33,7 @@ Known limits, stated on the site:
 
 ## Preferred remote run
 
-See [remote snapshots](docs/decisions/004-remote-snapshots.md) for retention, cost and operational limits. `.github/workflows/remote-ingestion.yml` performs the Treasury transfer and conversion on a GitHub runner, retains the raw ZIP in a private release, and publishes only after local and remote checks pass. Its first run selects the smallest nonempty agency; larger archives require a deliberate scope selection. No scheduled refresh is enabled.
+See [remote snapshots](docs/decisions/004-remote-snapshots.md) for retention, cost and operational limits. `.github/workflows/remote-ingestion.yml` performs the Treasury transfer and conversion on a GitHub runner, retains the raw ZIP in a private release, and publishes only after local and remote checks pass. Its first run selects the smallest nonempty agency in the saved partial catalogue; larger archives require a deliberate scope selection. No scheduled refresh is enabled.
 
 After publication, download only the preserved Parquet and validation records with the authenticated GitHub CLI:
 

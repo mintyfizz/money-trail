@@ -18,8 +18,12 @@ from pipeline.snapshots import ASSET_LIMIT, publish, validate_repository
 @contextmanager
 def metadata_retries():
     original = archive.curl
+    last_request = 0
     def request(*args, **kwargs):
+        nonlocal last_request
         for attempt in range(3):
+            time.sleep(max(0, 2 - (time.monotonic() - last_request)))
+            last_request = time.monotonic()
             try:
                 return original(*args, **kwargs)
             except subprocess.CalledProcessError as error:
@@ -36,7 +40,8 @@ def metadata_retries():
         archive.curl = original
 
 
-def run(year, kind, agency, root, repository, commit, max_output_gib=2, revision=1, publish_assets=True):
+def run(year, kind, agency, root, repository, commit, max_output_gib=2, revision=1, publish_assets=True,
+        saved_catalog=None):
     validate_repository(repository)
     if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit) or revision < 1:
         raise ValueError('A full commit SHA and positive snapshot revision are required')
@@ -58,10 +63,22 @@ def run(year, kind, agency, root, repository, commit, max_output_gib=2, revision
     with archive.exclusive_lock(root / 'remote.lock'), metadata_retries():
         archive.save_json(report_path, report)
         try:
-            selected = None if agency == 'smallest' else ('all' if agency == 'all' else int(agency))
-            catalog = archive.discover([year], agency=selected, output=catalog_path, kinds=(kind,))
-            if not catalog['complete']:
-                raise RuntimeError('Complete discovery required before selecting the smallest agency')
+            if saved_catalog is not None:
+                catalog = json.loads(Path(saved_catalog).read_text())
+                if agency != 'smallest':
+                    raise ValueError('Saved catalogue mode selects the smallest known agency only')
+                if any(r['fiscal_year'] != year or r['type'] != kind or r['agency_id'] == 'all'
+                       for r in catalog['files']):
+                    raise ValueError('Saved catalogue must contain only the requested year/category and agency scopes')
+                archive.save_json(catalog_path, catalog)
+                report['selection_basis'] = 'smallest_nonempty_in_saved_catalogue; unresolved agencies excluded'
+                report['saved_catalog'] = str(saved_catalog)
+            else:
+                selected = None if agency == 'smallest' else ('all' if agency == 'all' else int(agency))
+                catalog = archive.discover([year], agency=selected, output=catalog_path, kinds=(kind,))
+                if not catalog['complete']:
+                    raise RuntimeError('Complete discovery required before selecting the smallest agency')
+                report['selection_basis'] = 'fresh_discovery'
             for record in archive.select_records(catalog['files'], kind):
                 if record['http']['bytes'] >= ASSET_LIMIT:
                     raise ValueError('Raw ZIP exceeds GitHub release per-file limit; select a smaller agency')
@@ -128,6 +145,7 @@ if __name__ == '__main__':
     parser.add_argument('--commit', default=os.environ.get('GITHUB_SHA'))
     parser.add_argument('--max-output-gib', type=float, default=2)
     parser.add_argument('--revision', type=int, default=1)
+    parser.add_argument('--catalog', type=Path, help='Use a saved agency catalogue; revalidate selected files before downloading')
     args = parser.parse_args()
     run(args.year, args.kind, args.agency, args.data_root, args.repo, args.commit,
-        args.max_output_gib, args.revision)
+        args.max_output_gib, args.revision, saved_catalog=args.catalog)

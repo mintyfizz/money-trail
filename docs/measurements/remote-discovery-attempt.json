@@ -1,0 +1,16 @@
+{
+  "run_url": "https://github.com/mintyfizz/money-trail/actions/runs/44070628263",
+  "code_commit": "3200ab8c789b33cd33018ac1ed698291f8440e7a",
+  "status": "failed_during_fresh_discovery",
+  "confirmed_archive_count": 18,
+  "last_confirmed_agency": "Federal Communications Commission",
+  "failed_url": "https://files.usaspending.gov/award_data_archive/FY2025_028_Contracts_Full_20261106.zip",
+  "curl_exit_code": 56,
+  "retries": 3,
+  "backoff_seconds": [
+    5,
+    15
+  ],
+  "complete_zip_downloaded": false,
+  "next_step": "Use the saved catalogue, revalidating only selected candidates; do not claim global smallest or complete coverage"
+}

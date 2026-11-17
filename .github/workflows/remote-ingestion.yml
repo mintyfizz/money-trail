@@ -24,6 +24,10 @@ on:
         description: Snapshot revision; increase for a deliberate rebuild, never overwrite
         default: '1'
         required: true
+      catalog:
+        description: 'Saved catalogue for smallest mode; leave blank for fresh discovery or another scope/year'
+        default: docs/measurements/fy2025-agencies.json
+        required: false
   # Explicit pre-merge pilot launch: only pushing this dedicated branch starts ingestion.
   # Ordinary PR pushes run offline checks only. No schedule is installed.
   push:
@@ -61,9 +65,12 @@ jobs:
           AGENCY: ${{ inputs.agency || 'smallest' }}
           MAX_OUTPUT_GIB: ${{ inputs.max_output_gib || '2' }}
           SNAPSHOT_REVISION: ${{ inputs.revision || '1' }}
+          SAVED_CATALOG: ${{ github.event_name == 'push' && 'docs/measurements/fy2025-agencies.json' || inputs.catalog }}
         run: |
-          python -m pipeline.remote --year "$FISCAL_YEAR" --kind "$AWARD_KIND" \
-            --agency "$AGENCY" --max-output-gib "$MAX_OUTPUT_GIB" --revision "$SNAPSHOT_REVISION"
+          args=(--year "$FISCAL_YEAR" --kind "$AWARD_KIND" --agency "$AGENCY"
+                --max-output-gib "$MAX_OUTPUT_GIB" --revision "$SNAPSHOT_REVISION")
+          if [ -n "$SAVED_CATALOG" ]; then args+=(--catalog "$SAVED_CATALOG"); fi
+          python -m pipeline.remote "${args[@]}"
       - name: Record failure context without uploading large Actions artifacts
         if: failure()
         run: |

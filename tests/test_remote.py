@@ -61,3 +61,16 @@ class RemoteTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     remote.run(2025, 'contracts', agency, self.root, 'test/repo', 'a' * 40)
             discover.assert_not_called()
+
+    def test_saved_partial_catalog_is_reused_with_explicit_limited_scope(self):
+        catalog = self.root / 'saved.json'
+        archive.save_json(catalog, {'complete': False, 'files': self.records, 'unresolved_agencies': [3]})
+        with patch.object(remote.archive, 'discover') as discover, \
+             patch.object(remote.archive, 'download', side_effect=lambda r, *a, **k: self.root / r['file_name']), \
+             patch.object(remote, 'convert', side_effect=self.convert):
+            result = remote.run(2025, 'contracts', 'smallest', self.root / 'result', 'test/repo', 'a' * 40,
+                                publish_assets=False, saved_catalog=catalog)
+        discover.assert_not_called()
+        self.assertIn('unresolved agencies excluded', result['selection_basis'])
+        self.assertEqual(result['selected_source']['agency_id'], 2)
+        self.assertFalse(json.loads((self.root / 'result/catalog.json').read_text())['complete'])
