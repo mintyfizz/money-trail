@@ -2,7 +2,7 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: milestone 1 initiated, not complete.** Per-agency discovery, sequential resumable downloads, full ZIP verification batch Parquet conversion, independent value/count validation and guarded ZIP deletion are implemented. FY2025 national ZIP sizes were verified; a 10,000-record contract prefix was inspected. A live discovery attempt confirmed 17 of 112 listed agencies before source failures returned; no complete agency conversion has run. Full national downloads, assistance profiling and official-total reconciliation are still outstanding. There is no dashboard or scheduled refresh yet.
+**Status: milestone 1 initiated, not complete.** A remote GitHub Actions ingestion path and verified private release storage are now implemented; the first remote conversion is pending live validation. Per-agency discovery, sequential resumable downloads, full ZIP verification batch Parquet conversion, independent value/count validation and guarded ZIP deletion are implemented. FY2025 national ZIP sizes were verified; a 10,000-record contract prefix was inspected. A live discovery attempt confirmed 17 of 112 listed agencies before source failures returned; no complete agency conversion has run. Full national downloads, assistance profiling and official-total reconciliation are still outstanding. There is no dashboard or scheduled refresh yet.
 
 See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), and [next steps](docs/NEXT.md).
 
@@ -31,7 +31,19 @@ Known limits, stated on the site:
 - A transaction-year slice does not establish an award's complete lifetime history.
 - The inspected prefix is not a random sample and does not establish national row counts or error rates.
 
-## Run milestone 1
+## Preferred remote run
+
+See [remote snapshots](docs/decisions/004-remote-snapshots.md) for retention, cost and operational limits. `.github/workflows/remote-ingestion.yml` performs the Treasury transfer and conversion on a GitHub runner, retains the raw ZIP in a private release, and publishes only after local and remote checks pass. Its first run selects the smallest nonempty agency; larger archives require a deliberate scope selection. No scheduled refresh is enabled.
+
+After publication, download only the preserved Parquet and validation records with the authenticated GitHub CLI:
+
+```sh
+.venv/bin/python -m pipeline.snapshots SNAPSHOT_TAG --repo mintyfizz/money-trail --reserve-gib 8
+```
+
+Replace `SNAPSHOT_TAG` with the exact release tag. Data lands under `data/github/`. The Mac never needs the original ZIP for this path. Both machines retain an 8 GiB free-space reserve. Outputs are capped at 2 GiB per archive by default; each release asset must be below 2 GiB. A small agency's Parquet/ZIP ratio is only a provisional capacity scenario because metadata overhead dominates tiny files.
+
+## Local ingestion alternative
 
 Python 3.11+, curl, and macOS/Linux are required. Discovery, downloads and profiling use the standard library; Parquet conversion uses the pinned Arrow dependency. With the existing `uv` installation:
 
@@ -73,7 +85,7 @@ To run the steps separately:
 .venv/bin/python -m pipeline.bronze data/raw/VERIFIED_AGENCY_FILE.zip --max-output-gib 2
 ```
 
-Replace `VERIFIED_AGENCY_FILE.zip` with the actual filename in the manifest. Standalone `pipeline.bronze` conversion retains the ZIP; the sequential `pipeline.pilot` applies the validated deletion policy. Cloud storage is optional and remains unconfigured.
+Replace `VERIFIED_AGENCY_FILE.zip` with the actual filename in the manifest. Standalone `pipeline.bronze` conversion retains the ZIP; the sequential `pipeline.pilot` applies the validated deletion policy. The preferred remote workflow stores originals in private GitHub releases; this local alternative needs no cloud provider.
 
 The initial national `.zip.partial` is an explicitly incomplete diagnostic prefix, with no resume checkpoint. It is preserved separately and never adopted by the new downloader. Its sample remains reproducible with:
 
@@ -81,7 +93,7 @@ The initial national `.zip.partial` is an explicitly incomplete diagnostic prefi
 .venv/bin/python -m ingest.sample_prefix data/raw/FY2025_All_Contracts_Full_20261106.zip.partial --limit 10000 --output docs/measurements/fy2025-contracts-prefix-sample.json
 ```
 
-Live source access remains intermittent: [paced retry evidence](docs/measurements/slow-agency-pilot.json), [earlier catalogue/pilot attempt](docs/measurements/live-agency-pilot-attempt.json), [partial agency catalogue](docs/measurements/fy2025-agencies.json), and [earlier range check](docs/measurements/source-access-check.json). Controlled tests establish our recovery behavior, not Treasury's current range support. No transfer is left running.
+Direct Mac source access remains intermittent (the separate GitHub runner probe succeeded): [paced retry evidence](docs/measurements/slow-agency-pilot.json), [earlier catalogue/pilot attempt](docs/measurements/live-agency-pilot-attempt.json), [partial agency catalogue](docs/measurements/fy2025-agencies.json), and [earlier range check](docs/measurements/source-access-check.json). Controlled tests establish our recovery behavior, not Treasury's current range support. No transfer is left running.
 
 ## Planned pipeline
 

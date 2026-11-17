@@ -1,0 +1,77 @@
+name: Remote snapshot ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: Fiscal year
+        default: '2025'
+        required: true
+      kind:
+        description: Award category
+        type: choice
+        options: [contracts, assistance]
+        default: contracts
+      agency:
+        description: 'smallest, an agency database ID, or all for the national archive'
+        default: smallest
+        required: true
+      max_output_gib:
+        description: Maximum converted output per archive (8 GiB free reserve always enforced)
+        default: '2'
+        required: true
+      revision:
+        description: Snapshot revision; increase for a deliberate rebuild, never overwrite
+        default: '1'
+        required: true
+  # Explicit pre-merge pilot launch: only pushing this dedicated branch starts ingestion.
+  # Ordinary PR pushes run offline checks only. No schedule is installed.
+  push:
+    branches: [run/remote-ingestion-pilot]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-snapshot-ingestion
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install processor
+        run: python -m pip install --no-cache-dir -r requirements.txt
+      - name: Check ingestion before publishing
+        run: python -m unittest discover -s tests -v
+      - name: Preserve and publish one verified snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FISCAL_YEAR: ${{ inputs.year || '2025' }}
+          AWARD_KIND: ${{ inputs.kind || 'contracts' }}
+          AGENCY: ${{ inputs.agency || 'smallest' }}
+          MAX_OUTPUT_GIB: ${{ inputs.max_output_gib || '2' }}
+          SNAPSHOT_REVISION: ${{ inputs.revision || '1' }}
+        run: |
+          python -m pipeline.remote --year "$FISCAL_YEAR" --kind "$AWARD_KIND" \
+            --agency "$AGENCY" --max-output-gib "$MAX_OUTPUT_GIB" --revision "$SNAPSHOT_REVISION"
+      - name: Record failure context without uploading large Actions artifacts
+        if: failure()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('data/remote/run.json')
+          if path.exists():
+              result = json.loads(path.read_text())
+              print(json.dumps({key: result.get(key) for key in ('status', 'error', 'selected_source', 'candidates')}, indent=2))
+          PY
