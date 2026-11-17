@@ -488,9 +488,18 @@ class BuildTests(unittest.TestCase):
                  {"file_name": "FY2025_All_Contracts_Full_20261106.zip", "url": "u2"},
                  {"file_name": "FY(All)_All_Contracts_Delta_20261106.zip", "url": "u3"},
                  {"file_name": "FY2025_097_Contracts_Full_20261106.zip", "url": "u4"}]
-        self.assertEqual(fetch.pick(files, "Full"), {"file_name": "FY2025_All_Contracts_Full_20261106.zip",
+        self.assertEqual(fetch.pick(files, "Full"), {"kind": "contracts",
+                                                     "file_name": "FY2025_All_Contracts_Full_20261106.zip",
                                                      "url": "u2", "snapshot_date": "2026-11-06"})
         self.assertEqual(fetch.pick(files, "Delta")["url"], "u3")
+        assistance = [{"file_name": "FY2021_All_Assistance_Full_20261106.zip", "url": "a1"}]
+        self.assertEqual(fetch.pick(assistance + files, "Full", "assistance")["url"], "a1")
+        with self.assertRaises(SystemExit):
+            fetch.pick(files, "Full", "assistance")  # a contracts file is never taken for assistance
+        sent = []
+        with mock.patch.object(fetch, "post", lambda url, body: sent.append(body) or {"monthly_files": []}):
+            fetch.monthly_files(2021, "assistance")
+        self.assertEqual(sent[0]["type"], "assistance")
 
 
 if __name__ == "__main__":
