@@ -55,7 +55,7 @@ python3 -m ingest.sample_prefix data/raw/FY2025_All_Contracts_Full_20261106.zip.
 
 This diagnostic never produces a lakehouse input or a complete-file integrity claim.
 
-## How it works
+## Planned pipeline
 
 1. **Land**: Python downloads the archive files unchanged.
 2. **Convert**: PySpark writes Parquet partitioned by fiscal year and award type; malformed rows go to a reject table.

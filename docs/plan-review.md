@@ -1,6 +1,6 @@
 # Money Trail plan review
 
-Reviewed 17 November 2026. **Assessment: needs revision before a full-history build; suitable to initiate as a bounded pilot.** The implementation now uses the corrections below. The original Claude artifact was not edited.
+Reviewed 17 November 2026. **Assessment: needs revision before a full-history build; suitable to initiate as a bounded pilot.** The starter documentation now reflects the corrections below; the data model and dashboard are still to be built. The original Claude artifact was not edited.
 
 ## What to keep
 
