@@ -126,7 +126,8 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
     deleted_listed = con.execute("SELECT count(*) FROM deleted").fetchone()[0]
     # Diagnostic: group matched rows by the exact last-modified time of their surviving twin (same
     # key apart from the final transaction number, same modification, date and amount, not itself
-    # deleted). Re-keying happens in batches, and the batches behave differently in USAspending.
+    # deleted). Each deleted row is counted once. Rows with no twin, and rows whose candidate twins
+    # carry different times, are kept apart from the batches.
     batches = con.execute(f"""
         WITH m AS (
           SELECT s.contract_transaction_unique_key AS k, s.federal_action_obligation AS amount,
@@ -138,7 +139,9 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
           FROM stale s),
         twins AS (
           SELECT m.k, any_value(m.amount) AS amount, any_value(m.in_state_contracts) AS in_state_contracts,
-                 min(t.last_modified_date) AS twin_modified
+                 count(t.contract_transaction_unique_key) AS candidates,
+                 CASE WHEN count(DISTINCT t.last_modified_date) > 1 THEN 'ambiguous'
+                      ELSE min(t.last_modified_date) END AS twin_modified
           FROM m LEFT JOIN source t
             ON regexp_replace(t.contract_transaction_unique_key, '_[^_]*$', '') = m.ak
            AND t.modification_number = m.modification_number AND t.action_date = m.action_date
@@ -146,7 +149,8 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
            AND NOT EXISTS (SELECT 1 FROM deleted d WHERE d.k = t.contract_transaction_unique_key)
           GROUP BY m.k)
         SELECT twin_modified, count(*), sum(amount),
-               count(*) FILTER (WHERE in_state_contracts), sum(amount) FILTER (WHERE in_state_contracts)
+               count(*) FILTER (WHERE in_state_contracts), sum(amount) FILTER (WHERE in_state_contracts),
+               count(*) FILTER (WHERE candidates > 1)
         FROM twins GROUP BY 1 ORDER BY abs(sum(amount)) DESC NULLS LAST""").fetchall()
     if stale_out:
         # Audit trail: every row removed, with where it came from, so the exclusion can be checked.
@@ -239,9 +243,11 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
                                 "meaning": ("Rows whose keys the same release's delta file lists as deleted. "
                                             "Reported for diagnosis; not removed unless applied.")},
         "deleted_key_batches": [
-            {"twin_last_modified": b or None, "rows": n, "cents": cents(c),
-             "state_contract_rows": sn, "state_contract_cents": cents(sc)}
-            for b, n, c, sn, sc in batches],
+            {"twin_last_modified": b if b and b != "ambiguous" else None,
+             "match": "no twin" if b is None else ("twins at different times" if b == "ambiguous" else "twin"),
+             "rows": n, "cents": cents(c), "state_contract_rows": sn, "state_contract_cents": cents(sc),
+             "rows_with_several_twin_candidates": multi}
+            for b, n, c, sn, sc, multi in batches],
         "full_snapshot": {"rows": full[0], "net_obligations_cents": cents(full[1]),
                           "note": "The source file as published. Totals above equal this unless deleted keys were applied."},
         "states": dict(sorted(states.items())),

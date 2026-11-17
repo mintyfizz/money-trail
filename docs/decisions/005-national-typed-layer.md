@@ -48,14 +48,19 @@ removal to rows with a live twin gave the same result.
   DCMA's part of the same batch equals its −$3,562,088.89 gap exactly. Across all agencies the
   batch holds $14,814,163,448.02 of in-state contracts twice, against a total gap of
   $14,809,601,706.12. Files: Codex's `gap-investigation/`, and `deleted_key_batches` in the summary.
-- **Mechanism (Claude, award-level live checks):** 50 sampled PIIDs each match USAspending's live
-  search total exactly as either "both copies" or "one copy" of the re-keyed rows, never neither.
-  Stratified by batch (7 awards each, all pages of `/api/v2/transactions/`):
-  - 4 Nov `10:11:48`: the live search total and the live transaction records agree in all 7 awards
-    (one copy in 5, both in 2). The archive holds both, which is the gap.
-  - 2 Nov (`14:06:57`, `14:55:48`): the live search total counts both copies in all 7 awards, but
-    the live transaction records hold one copy in all 7. The archive also holds both, so the
+- **Mechanism (Claude, sampled award-level live checks):** of 50 sampled PIIDs, 47 have a nonzero
+  amount at stake; each matches USAspending's live search total exactly as either "both copies"
+  (34) or "one copy" (13) of the re-keyed rows, never neither. The other 3 net to zero, so a sum
+  cannot tell one copy from two (indeterminate). Stratified by batch (all pages of
+  `/api/v2/transactions/`, evidence in Codex's `claude-evidence/`):
+  - 4 Nov `10:11:48`: in all 5 awards with a nonzero amount, the live search total and the live
+    transaction records both hold one copy (2 more awards net to zero: indeterminate). The
+    archive holds both, which is the gap.
+  - 2 Nov (`14:06:57`, `14:55:48`): in all 7 sampled awards the live search total counts both
+    copies, while the live transaction records hold one. The archive also holds both, so the
     archive matches the live map there.
+  These are sampled awards plus the 50-of-51-state accounting match, not a check of every
+  transaction in each batch.
 - **Earlier failed fix explained:** removing every deleted key also removed the 2 November copies
   ($30.58B of in-state contracts) that the live map still counts, which is why the gap swung to
   −$31.63B.

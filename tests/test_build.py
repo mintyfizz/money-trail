@@ -373,10 +373,12 @@ class BuildTests(unittest.TestCase):
         pq.write_table(pa.table({"contract_transaction_unique_key": ["A_P1_X_2", "B_P2_Y_1", "C_P3_Z_1"]}), deleted)
         result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted)
         batches = {b["twin_last_modified"]: b for b in result["deleted_key_batches"]}
+        self.assertEqual(batches[None]["match"], "no twin")
         self.assertEqual(batches["2026-11-04 10:11:48+00"]["cents"], 10000)
         self.assertEqual(batches["2026-11-04 10:11:48+00"]["state_contract_cents"], 10000)
         self.assertEqual(batches["2026-11-02 14:06:57+00"]["state_contract_rows"], 0)
         self.assertEqual(batches[None]["rows"], 1)  # no surviving twin
+        self.assertEqual(sum(b["rows"] for b in result["deleted_key_batches"]), 3)  # each deleted row once
 
     def test_duckdb_exports_are_guarded(self):
         from pipeline import guard
