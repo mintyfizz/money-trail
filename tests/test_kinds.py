@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 from pipeline import kinds, silver
 
@@ -303,3 +304,45 @@ class ContractsPlaceTests(unittest.TestCase):
             self.assertEqual(r["outside_map"]["foreign_cents"], 2000)
             self.assertEqual(r["outside_map"]["territory_cents"], 1000)
             self.assertEqual({x["code"] for x in r["outside_map"]["freely_associated_states"]}, {"FM", "PW"})
+
+
+class AssistanceReconcileTests(unittest.TestCase):
+    def test_each_category_compared_alone_with_outside_places_kept_apart(self):
+        from pipeline import gold, reconcile
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = gold.summarise(assistance_silver(tmp, ASSISTANCE_ROWS), 2025, "2026-11-06", "a.zip",
+                                     kind="assistance")
+        data = kinds.load_categories()
+        calls = []
+
+        def fake_post(url, body):
+            codes = body["filters"]["award_type_codes"]
+            calls.append((url, tuple(codes), body.get("page")))
+            if "geo_layer" not in body:
+                page = body["page"]
+                results = ([{"name": "Department of Education", "amount": 900.00}] if page == 1 else
+                           [{"name": "Small Business Administration", "amount": 1234.56}])
+                return {"results": results, "page_metadata": {"hasNext": page == 1}}
+            if codes == data["api_codes"]["grants"]:
+                return {"results": [{"shape_code": "CA", "aggregated_amount": 1000.00, "population": 10},
+                                    {"shape_code": "TX", "aggregated_amount": -50.25},
+                                    {"shape_code": "PR", "aggregated_amount": 5.00},
+                                    {"shape_code": "", "aggregated_amount": 7.00}]
+                        + [{"shape_code": c, "aggregated_amount": 0} for c in gold.STATES if c not in ("CA", "TX")]}
+            return {"results": []}
+
+        with mock.patch.object(reconcile, "post", fake_post):
+            result = reconcile.reconcile(summary)
+        self.assertEqual(result["categories"], ["grants", "direct_payments", "loans", "other_assistance",
+                                                "not_specified"])
+        grants = {r["state"]: r for r in result["grants"]["rows"]}
+        self.assertEqual(grants["CA"]["gap_cents"], 0)
+        self.assertEqual(grants["TX"]["gap_cents"], 0)
+        self.assertEqual(result["official_outside_states"]["grants"], {"PR": 500, "(blank)": 700})
+        self.assertEqual(result["grants"]["total_official_cents"], 94975)  # PR and blank never enter
+        self.assertEqual(result["not_specified"]["status"], "no official figure")
+        self.assertEqual(result["not_specified"]["total_ours_cents"], 4000)
+        self.assertFalse(any(codes == ("-1",) for _, codes, _ in calls))
+        agencies = {a["agency"]: a for a in result["agencies"]}
+        self.assertEqual(agencies["Small Business Administration"]["gap_cents"], 0)  # second page was read
+        self.assertNotIn("not_specified", result["agency_categories"])

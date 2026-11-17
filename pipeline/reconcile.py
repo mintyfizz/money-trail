@@ -1,9 +1,12 @@
 """Compare this project's per-state totals with USAspending's own published totals.
 
 Both sides use the same definition: transactions with an action date in the fiscal year, place of
-performance state, and the same award type codes. Contracts (A-D) and indefinite-delivery
-vehicles are compared separately. The official side is queried live, so its snapshot is newer than
-the archive file; gaps are recorded, never hidden.
+performance state, and the same award type codes. Each category of the versioned map is compared on
+its own, using the API codes listed for it in categories.json (contracts, IDVs, grants, direct
+payments, loans, other assistance). The official side sums Treasury's generated pragmatic
+obligation, which is our measure. It is queried live, so its snapshot is newer than the archive
+file; gaps are recorded, never hidden. Places outside the 50 states and DC, and the API's
+blank-place bucket, are kept apart and never enter the comparison.
 """
 from __future__ import annotations
 
@@ -16,6 +19,7 @@ import time
 import urllib.request
 
 from pipeline.gold import STATES
+from pipeline.kinds import load_categories
 
 API = "https://api.usaspending.gov/api/v2/search/spending_by_geography/"
 CONTRACT_CODES = ["A", "B", "C", "D"]
@@ -44,18 +48,24 @@ def post(url: str, body: dict, attempts: int = 4) -> dict:
     raise RuntimeError("unreachable")
 
 
-def official_by_state(year: int, codes: list[str]) -> dict:
+def official_by_state(year: int, codes: list[str], with_outside: bool = False):
     body = {"scope": "place_of_performance", "geo_layer": "state", "subawards": False,
             "spending_level": "transactions",
             "filters": {"time_period": [fiscal_window(year)], "award_type_codes": codes}}
     results = post(API, body)["results"]
-    return {r["shape_code"]: r for r in results if r.get("shape_code")}
+    states = {r["shape_code"]: r for r in results if r.get("shape_code") in STATES}
+    if not with_outside:
+        return states
+    # Territories and the blank-place bucket: reported beside the comparison, never inside it.
+    outside = {(r.get("shape_code") or "(blank)"): official_cents(r) for r in results
+               if r.get("shape_code") not in STATES}
+    return states, outside, len(results)
 
 
-def ours_by_state(summary: dict, codes: set[str]) -> dict:
-    """Integer cents per state for the given award type groups. A state in the summary with no rows
-    of these types is a known zero; a state absent from the summary is missing."""
-    return {code: sum(t["amount_cents"] for t in state["types"] if t["code"] in codes)
+def ours_by_state(summary: dict, category: str) -> dict:
+    """Integer cents per state for one category. A state in the summary with no rows of this
+    category is a known zero; a state absent from the summary is missing."""
+    return {code: sum(c["amount_cents"] for c in state.get("categories", []) if c["category"] == category)
             for code, state in summary["states"].items()}
 
 
@@ -118,15 +128,33 @@ def compare(ours: dict, official: dict) -> dict:
 CATEGORY = "https://api.usaspending.gov/api/v2/search/spending_by_category/awarding_agency/"
 
 
-def official_by_agency(year: int) -> dict:
-    """Published contract totals (A-D) by awarding agency, place of performance in the 50 states and
-    DC: the same 51 places the state comparison uses."""
+def official_by_agency(year: int, codes: list[str] | None = None, max_pages: int = 20) -> dict:
+    """Published totals by awarding agency for the given codes (default: contracts A-D), place of
+    performance in the 50 states and DC: the same 51 places the state comparison uses. Every page
+    is read, so no agency is cut off by the page size."""
     places = [{"country": "USA", "state": code} for code in sorted(STATES)]
-    body = {"spending_level": "transactions", "limit": 100,
-            "filters": {"time_period": [fiscal_window(year)], "award_type_codes": CONTRACT_CODES,
-                        "place_of_performance_locations": places}}
-    results = post(CATEGORY, body)["results"]
-    return {r["name"]: int((Decimal(str(r["amount"])) * 100).quantize(Decimal("1"))) for r in results}
+    totals = {}
+    for page in range(1, max_pages + 1):
+        body = {"spending_level": "transactions", "limit": 100, "page": page,
+                "filters": {"time_period": [fiscal_window(year)], "award_type_codes": codes or CONTRACT_CODES,
+                            "place_of_performance_locations": places}}
+        response = post(CATEGORY, body)
+        for r in response["results"]:
+            totals[r["name"]] = totals.get(r["name"], 0) + int((Decimal(str(r["amount"])) * 100).quantize(Decimal("1")))
+        if not (response.get("page_metadata") or {}).get("hasNext"):
+            return totals
+    raise RuntimeError(f"Agency totals still paging after {max_pages} pages; refusing a partial list")
+
+
+def ours_by_agency(summary: dict, categories: list[str]) -> dict:
+    """Integer cents per awarding agency name in the 50 states and DC, from the full matrix."""
+    columns = summary["matrix"]["columns"]
+    totals = {}
+    for row in summary["matrix"]["rows"]:
+        r = dict(zip(columns, row))
+        if r["place_kind"] == "state" and r["category"] in categories:
+            totals[r["agency"]] = totals.get(r["agency"], 0) + r["amount_cents"]
+    return totals
 
 
 def compare_agencies(ours: dict, official: dict) -> list[dict]:
@@ -140,23 +168,47 @@ def compare_agencies(ours: dict, official: dict) -> list[dict]:
     return rows
 
 
-def reconcile(summary: dict) -> dict:
-    year = summary["fiscal_year"]
-    contracts = official_by_state(year, CONTRACT_CODES)
-    idvs = official_by_state(year, IDV_CODES)
-    population = {code: r.get("population") for code, r in contracts.items() if r.get("population")}
-    return {
-        "fiscal_year": year,
+# Categories whose official figure is known to be unavailable from the state endpoint. The API
+# returns no rows for code -1, which says nothing about whether the archive has such rows.
+NO_OFFICIAL_FIGURE = {"not_specified": "The geography endpoint returns no results for assistance type -1, "
+                                       "so this bucket has no published figure to compare with."}
+
+
+def reconcile(summary: dict, categories: dict | None = None) -> dict:
+    year, kind = summary["fiscal_year"], summary.get("kind", "contracts")
+    categories = categories or load_categories()
+    names = [c for c, v in categories["categories"].items() if v["kind"] == kind]
+    result = {
+        "fiscal_year": year, "kind": kind,
         "archive_snapshot": summary["snapshot_date"],
+        "category_map_version": categories["version"],
         "official_queried_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "definition": {"time_period": fiscal_window(year), "scope": "place_of_performance", "geo_layer": "state",
-                       "spending_level": "transactions", "measure": "sum of federal_action_obligation",
+                       "spending_level": "transactions",
+                       "measure": ("sum of federal_action_obligation" if kind == "contracts" else
+                                   "generated pragmatic obligation: loan subsidy cost for loans, "
+                                   "federal_action_obligation otherwise"),
                        "note": "State-layer totals are domestic only; they are not the national all-location total."},
-        "contracts": compare(ours_by_state(summary, set(CONTRACT_CODES)), contracts),
-        "idvs": compare(ours_by_state(summary, {"IDV"}), idvs),
-        "population": population,
-        "agencies": compare_agencies(summary.get("agency_contracts_in_states", {}), official_by_agency(year)),
+        "categories": names, "population": {}, "official_outside_states": {},
     }
+    for name in names:
+        if name in NO_OFFICIAL_FIGURE:
+            result[name] = {"status": "no official figure", "reason": NO_OFFICIAL_FIGURE[name],
+                            "total_ours_cents": sum(ours_by_state(summary, name).values())}
+            continue
+        official, outside, returned = official_by_state(year, categories["api_codes"][name], with_outside=True)
+        result[name] = compare(ours_by_state(summary, name), official)
+        result[name]["official_rows_returned"] = returned
+        result["official_outside_states"][name] = outside
+        if not result["population"]:
+            result["population"] = {code: r.get("population") for code, r in official.items() if r.get("population")}
+    agency_categories = ["contracts"] if kind == "contracts" else [n for n in names if n not in NO_OFFICIAL_FIGURE]
+    codes = [code for n in agency_categories for code in categories["api_codes"][n]]
+    ours = (ours_by_agency(summary, agency_categories) if "matrix" in summary
+            else summary.get("agency_contracts_in_states", {}))
+    result["agency_categories"] = agency_categories
+    result["agencies"] = compare_agencies(ours, official_by_agency(year, codes))
+    return result
 
 
 def main() -> None:
@@ -166,10 +218,10 @@ def main() -> None:
     args = parser.parse_args()
     result = reconcile(json.loads(Path(args.summary).read_text()))
     Path(args.output).write_text(json.dumps(result, indent=1))
-    for part in ("contracts", "idvs"):
+    for part in result["categories"]:
         r = result[part]
-        print(part, {k: r[k] for k in ("status", "total_ours_cents", "total_official_cents", "total_gap_pct", "states_within_1_pct",
-                                         "max_abs_gap_pct")})
+        print(part, {k: r.get(k) for k in ("status", "total_ours_cents", "total_official_cents", "total_gap_pct",
+                                            "states_within_1_pct", "max_abs_gap_pct")})
 
 
 if __name__ == "__main__":
