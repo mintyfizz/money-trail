@@ -49,7 +49,7 @@ ROWS_A = [
 ROWS_B = [
     row("T6", "75.25", state="PR", country="USA"),
     row("T7", "40.00", state="", country="DEU"),
-    row("T8", "", state="DC", award_type="C"),
+    row("T8", "0.00", state="DC", award_type="C"),
     row("T9", "10.00", state="CA", award="CONT_AWD_T1"),
 ]
 
@@ -78,9 +78,9 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(table[1]["federal_action_obligation_raw"], "-200.05")
         self.assertEqual(str(table[1]["federal_action_obligation"]), "-200.05")
         self.assertEqual([r["source_row"] for r in table], [2, 3, 4, 5, 6])
-        blank = pq.read_table(self.root / "silver" / "part-0001.parquet").to_pylist()[2]
-        self.assertIsNone(blank["federal_action_obligation"])
-        self.assertEqual(blank["federal_action_obligation_raw"], "")
+        zero = pq.read_table(self.root / "silver" / "part-0001.parquet").to_pylist()[2]
+        self.assertEqual(str(zero["federal_action_obligation"]), "0.00")
+        self.assertEqual(zero["action_date_raw"], "2025-03-01")
 
     def test_bad_money_is_counted_not_zeroed(self):
         bad_zip = self.root / "bad.zip"
@@ -109,7 +109,9 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result["outside_map"]["territories"][0]["code"], "PR")
         self.assertEqual(result["states"]["CA"]["rank"], 1)
         self.assertEqual(result["checks"], {"rows": 9, "duplicate_keys": 0, "other_fiscal_year": 0,
-                                            "null_obligations": 1, "negative_rows": 1})
+                                            "outside_fiscal_window": 0, "null_obligations": 0, "null_dates": 0,
+                                            "negative_rows": 1})
+        self.assertEqual(result["stale_rows_removed"]["rows"], 0)
 
     def test_summary_awards_and_recipients(self):
         result = gold.summarise(self.root / "silver", 2025, "2026-11-06", self.zip.name)
@@ -131,7 +133,8 @@ class BuildTests(unittest.TestCase):
             if codes == reconcile.CONTRACT_CODES:
                 return {"results": [{"shape_code": "CA", "aggregated_amount": 810.05, "population": 100},
                                     {"shape_code": "TX", "aggregated_amount": 790.0, "population": 50},
-                                    {"shape_code": "DC", "aggregated_amount": 0}]}
+                                    {"shape_code": "DC", "aggregated_amount": 0}]
+                        + [{"shape_code": c, "aggregated_amount": 0} for c in gold.STATES if c not in ("CA", "TX", "DC")]}
             return {"results": []}
         with mock.patch.object(reconcile, "post", fake_post):
             result = reconcile.reconcile(summary)
@@ -139,13 +142,16 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(rows["CA"]["gap_cents"], 0)
         self.assertEqual(rows["TX"]["gap_cents"], 1000)
         self.assertEqual(result["contracts"]["largest_gaps"][0]["state"], "TX")
+        self.assertEqual(result["contracts"]["status"], "incomplete")  # fixture has only 3 of 51 places
         self.assertEqual(result["population"], {"CA": 100, "TX": 50})
-        self.assertEqual(result["definition"]["time_period"], {"start_date": "2024-10-01", "end_date": "2025-09-30"})
+        self.assertEqual(result["definition"]["time_period"], {"start_date": "2024-10-01", "end_date": "2025-09-30",
+                                                               "date_type": "action_date"})
+        self.assertEqual(result["definition"]["spending_level"], "transactions")
 
     def test_identical_snapshots_have_no_changes(self):
         result = changes.diff_snapshots(self.root / "silver", self.root / "silver")
         self.assertEqual(result["totals"]["added"] + result["totals"]["removed"] +
-                         result["totals"]["amount_changed"], 0)
+                         result["totals"]["changed"], 0)
         self.assertEqual(result["totals"]["unchanged"], 9)
 
     def test_planted_correction_and_deletion_are_detected(self):
@@ -157,27 +163,124 @@ class BuildTests(unittest.TestCase):
         result = changes.diff_snapshots(self.root / "silver", self.root / "silver2")
         self.assertEqual(result["totals"]["removed"], 1)
         self.assertEqual(result["totals"]["added"], 1)
-        self.assertEqual(result["totals"]["amount_changed"], 1)
+        self.assertEqual(result["totals"]["changed"], 1)
         self.assertEqual(result["totals"]["net_change_cents"], -10000 - 50000 + 500)
         self.assertEqual(result["places"]["TX"]["removed"], 1)
 
     def test_delta_file_labels(self):
         delta_zip = self.root / "FY(All)_All_Contracts_Delta_20261106.zip"
+        tombstone = {**{c: "" for c in silver.COLUMNS}, "contract_transaction_unique_key": "D1",
+                     "correction_delete_ind": "D"}
         write_zip(delta_zip, {"d.csv": [
             {**row("N1", "100.00"), "correction_delete_ind": ""},
             {**row("N2", "-40.00"), "correction_delete_ind": ""},
-            {**row("C1", "70.00", state="TX"), "correction_delete_ind": "C"},
-            {**row("D1", "", state="", fy="", date=""), "correction_delete_ind": "D"},
+            {**row("C1", "70.00", state="TX"), "correction_delete_ind": "c"},
+            tombstone,
             {**row("O1", "9.00", fy="2019", date="2019-01-01"), "correction_delete_ind": ""},
         ]}, delta=True)
-        silver.extract(delta_zip, self.root / "delta")
+        report = silver.extract(delta_zip, self.root / "delta")
+        self.assertEqual((report["bad_money"], report["bad_dates"], report["bad_indicators"]), (0, 0, 0))
         result = changes.delta_summary(self.root / "delta", [2025])
         ca = result["years"]["2025"]["CA"]
-        self.assertEqual((ca["new_rows"], ca["new_cents"]), (2, 6000))
+        self.assertEqual((ca["added_or_updated_rows"], ca["obligations_on_these_rows_cents"]), (2, 6000))
         self.assertEqual((ca["deobligation_rows"], ca["deobligation_cents"]), (1, -4000))
-        self.assertEqual(result["years"]["2025"]["TX"]["corrected_rows"], 1)
-        self.assertEqual(result["deletions_without_listed_year"], 1)
+        self.assertEqual(result["years"]["2025"]["TX"]["flagged_correction_rows"], 1)
+        self.assertEqual(result["all_years"], {"added_or_updated_rows": 4, "flagged_correction_rows": 1,
+                                               "deleted_rows": 1})
         self.assertNotIn("2019", result["years"])
+        self.assertNotIn("new_rows", ca)
+        import pyarrow.parquet as pq
+        count = changes.deleted_keys(self.root / "delta", self.root / "deleted.parquet")
+        self.assertEqual(count, 1)
+        self.assertEqual(pq.read_table(self.root / "deleted.parquet").column(0).to_pylist(), ["D1"])
+
+    def test_newer_delta_column_name_and_unknown_flags(self):
+        newer = self.root / "newer.zip"
+        columns = ["correction_delete_indicator"] + list(silver.COLUMNS)
+        with zipfile.ZipFile(newer, "w") as archive:
+            buffer = io.StringIO()
+            writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
+            writer.writeheader()
+            writer.writerow({**row("A1", "1.00"), "correction_delete_indicator": "D"})
+            writer.writerow({**row("A2", "1.00"), "correction_delete_indicator": "X"})
+            archive.writestr("d.csv", buffer.getvalue())
+        report = silver.extract(newer, self.root / "newer")
+        self.assertEqual(report["members"][0]["delta_column"], "correction_delete_indicator")
+        self.assertEqual(report["bad_indicators"], 1)
+
+
+    def summary_of(self, rows, **kw):
+        z = self.root / f"case{len(list(self.root.iterdir()))}.zip"
+        write_zip(z, {"x.csv": rows})
+        out = self.root / (z.stem + "_silver")
+        silver.extract(z, out)
+        return out
+
+    def test_impossible_date_is_rejected_not_normalised(self):
+        z = self.root / "dates.zip"
+        write_zip(z, {"x.csv": [row("D1", "1.00", date="2025-02-30"), row("D2", "1.00")]})
+        report = silver.extract(z, self.root / "dates")
+        self.assertEqual(report["bad_dates"], 1)
+
+    def test_blank_amount_blocks_summary(self):
+        out = self.summary_of([row("B1", ""), row("B2", "5.00")])
+        with self.assertRaises(gold.QualityError):
+            gold.summarise(out, 2025, "2026-11-06", "x.zip")
+
+    def test_duplicate_key_blocks_summary(self):
+        out = self.summary_of([row("K1", "100.00"), row("K1", "100.00")])
+        with self.assertRaisesRegex(gold.QualityError, "duplicate_keys"):
+            gold.summarise(out, 2025, "2026-11-06", "x.zip")
+
+    def test_action_date_outside_fiscal_year_blocks_summary(self):
+        out = self.summary_of([row("W1", "1.00", fy="2025", date="2024-03-01")])
+        with self.assertRaisesRegex(gold.QualityError, "outside_fiscal_window"):
+            gold.summarise(out, 2025, "2026-11-06", "x.zip")
+
+    def test_stale_keys_from_delta_are_removed_and_reported(self):
+        import pyarrow as pa, pyarrow.parquet as pq
+        out = self.summary_of([row("OLD_2", "440.00"), row("NEW_14", "440.00"), row("X", "10.00", state="TX")])
+        deleted = self.root / "deleted.parquet"
+        pq.write_table(pa.table({"contract_transaction_unique_key": ["OLD_2", "NOT_PRESENT"]}), deleted)
+        result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted)
+        self.assertEqual(result["states"]["CA"]["net_obligations_cents"], 44000)
+        self.assertEqual(result["stale_rows_removed"]["rows"], 1)
+        self.assertEqual(result["stale_rows_removed"]["cents"], 44000)
+
+    def test_reconcile_never_skips_a_state(self):
+        ours = {"CA": 10000}
+        official = {"CA": {"aggregated_amount": 100}, "TX": {"aggregated_amount": 900}}
+        result = reconcile.compare(ours, official)
+        self.assertEqual(result["status"], "incomplete")
+        self.assertIn("TX", result["missing_ours"])
+        self.assertEqual(len(result["rows"]), 51)
+
+    def test_reconcile_pass_rule(self):
+        ours = {c: 100000 for c in gold.STATES}
+        official = {c: {"aggregated_amount": reconcile.Decimal("1000.00")} for c in gold.STATES}
+        self.assertEqual(reconcile.compare(ours, official)["status"], "passed")
+        ours["AL"] = 102000  # 2 percent off in one state
+        self.assertEqual(reconcile.compare(ours, official)["status"], "gaps")
+
+    def test_moved_row_changes_both_states(self):
+        old = self.summary_of([row("M1", "100.00", state="CA")])
+        new = self.summary_of([row("M1", "100.00", state="TX")])
+        result = changes.diff_snapshots(old, new)
+        self.assertEqual(result["totals"]["changed"], 1)
+        self.assertEqual(result["totals"]["moved_place"], 1)
+        self.assertEqual(result["places"]["CA"]["net_change_cents"], -10000)
+        self.assertEqual(result["places"]["TX"]["net_change_cents"], 10000)
+
+    def test_reserve_is_checked_before_writing(self):
+        from pipeline import guard
+        with mock.patch.object(guard, "free_bytes", return_value=8 * guard.GIB + 10):
+            with self.assertRaises(RuntimeError):
+                guard.require(self.root, 100, 8)
+        z = self.root / "space.zip"
+        write_zip(z, {"x.csv": [row("S1", "1.00")]})
+        with mock.patch("pipeline.guard.free_bytes", return_value=0):
+            with self.assertRaises(RuntimeError):
+                silver.extract(z, self.root / "space")
 
     def test_fetch_picks_latest_file(self):
         from pipeline import fetch

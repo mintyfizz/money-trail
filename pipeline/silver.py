@@ -20,6 +20,8 @@ import pyarrow.compute as pc
 import pyarrow.csv as arrow_csv
 import pyarrow.parquet as parquet
 
+from pipeline.guard import require
+
 COLUMNS = (
     "contract_transaction_unique_key", "contract_award_unique_key", "award_id_piid", "modification_number",
     "federal_action_obligation", "action_date", "action_date_fiscal_year",
@@ -34,6 +36,9 @@ COLUMNS = (
     "prime_award_base_transaction_description", "last_modified_date",
 )
 DELTA_COLUMN = "correction_delete_ind"
+# Treasury's newer delta generator names the column differently; both are accepted, nothing else.
+DELTA_ALIASES = ("correction_delete_ind", "correction_delete_indicator")
+DELTA_VALUES = {"", "C", "D"}
 MONEY = pa.decimal128(23, 2)
 
 
@@ -64,38 +69,58 @@ def to_money(values: pa.Array) -> tuple[pa.Array, int]:
 
 
 def to_date(values: pa.Array) -> tuple[pa.Array, int]:
+    """Strict calendar dates: a parsed date must format back to exactly the source text.
+
+    strptime alone normalises impossible dates (2025-02-30 becomes 2025-03-02); the round trip
+    rejects them. Rejected dates become null and are counted.
+    """
     stripped = pc.utf8_trim_whitespace(values)
     blank = pc.equal(stripped, "")
     cleaned = pc.if_else(blank, pa.scalar(None, pa.string()), stripped)
     parsed = pc.strptime(cleaned, format="%Y-%m-%d", unit="s", error_is_null=True)
-    bad = pc.sum(pc.and_(pc.is_valid(cleaned), pc.is_null(parsed))).as_py() or 0
-    return pc.cast(parsed, pa.date32()), bad
+    round_trip = pc.strftime(parsed, format="%Y-%m-%d")
+    exact = pc.fill_null(pc.equal(round_trip, cleaned), False)
+    valid = pc.and_(pc.is_valid(cleaned), exact)
+    bad = pc.sum(pc.and_(pc.is_valid(cleaned), pc.invert(exact))).as_py() or 0
+    dates = pc.if_else(valid, pc.cast(parsed, pa.date32()), pa.scalar(None, pa.date32()))
+    return dates, bad
 
 
-def type_batch(batch: pa.RecordBatch, source_file: str, first_row: int, delta: bool) -> tuple[pa.Table, dict]:
+def type_batch(batch: pa.RecordBatch, source_file: str, first_row: int, delta: str | None) -> tuple[pa.Table, dict]:
     table = pa.Table.from_batches([batch])
+    bad_indicators = 0
+    if delta:
+        indicator = pc.utf8_upper(pc.utf8_trim_whitespace(table[delta].combine_chunks()))
+        bad_indicators = pc.sum(pc.invert(pc.is_in(indicator, pa.array(sorted(DELTA_VALUES))))).as_py() or 0
+        table = table.drop_columns([delta]).append_column(DELTA_COLUMN, indicator)
     money, bad_money = to_money(table["federal_action_obligation"].combine_chunks())
     action_date, bad_dates = to_date(table["action_date"].combine_chunks())
     columns = {name: table[name] for name in table.column_names}
     columns["federal_action_obligation_raw"] = columns.pop("federal_action_obligation")
     columns["federal_action_obligation"] = money
+    columns["action_date_raw"] = columns["action_date"]
     columns["action_date"] = action_date
     columns["source_file"] = pa.array([source_file] * table.num_rows, pa.string())
     columns["source_row"] = pa.array(range(first_row, first_row + table.num_rows), pa.int64())
     order = ["contract_transaction_unique_key", "federal_action_obligation", "action_date"]
     order += [c for c in COLUMNS if c not in order and c != "federal_action_obligation"]
-    order += ["federal_action_obligation_raw"] + ([DELTA_COLUMN] if delta else []) + ["source_file", "source_row"]
+    order += ["federal_action_obligation_raw", "action_date_raw"] + ([DELTA_COLUMN] if delta else []) + ["source_file", "source_row"]
     typed = pa.table({name: columns[name] for name in order})
     keys = table["contract_transaction_unique_key"].combine_chunks()
     blank_keys = pc.sum(pc.equal(pc.utf8_trim_whitespace(keys), "")).as_py() or 0
     total = pc.sum(money).as_py()
     stats = {"rows": table.num_rows, "bad_money": bad_money, "bad_dates": bad_dates, "blank_keys": blank_keys,
+             "bad_indicators": bad_indicators,
              "obligation_sum": str(total) if total is not None else "0"}
     return typed, stats
 
 
-def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16) -> dict:
-    """Write one typed Parquet file per CSV member. Never extracts the CSV to disk."""
+def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, reserve_gib: float = 8) -> dict:
+    """Write one typed Parquet file per CSV member. Never extracts the CSV to disk.
+
+    Before each batch is written, the in-memory size of the batch (an upper bound on its compressed
+    Parquet size) must fit while keeping `reserve_gib` free; otherwise the run stops.
+    """
     zip_path, out_dir = Path(zip_path), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -107,14 +132,18 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16) -> d
             raise ValueError(f"{zip_path.name} contains no CSV members")
         for index, info in enumerate(members):
             header = read_header(archive, info)
-            delta = DELTA_COLUMN in header
-            wanted = list(COLUMNS) + ([DELTA_COLUMN] if delta else [])
+            present = [name for name in DELTA_ALIASES if name in header]
+            if len(present) > 1:
+                raise ValueError(f"{info.filename} has more than one correction/delete column: {present}")
+            delta = present[0] if present else None
+            wanted = list(COLUMNS) + ([delta] if delta else [])
             missing = [c for c in wanted if c not in header]
             if missing:
                 raise ValueError(f"{info.filename} is missing expected columns: {missing}")
             target = out_dir / f"part-{index:04d}.parquet"
             member = {"source_file": info.filename, "output": target.name, "rows": 0, "bad_money": 0,
-                      "bad_dates": 0, "blank_keys": 0, "obligation_sum": "0", "delta": delta,
+                      "bad_dates": 0, "blank_keys": 0, "bad_indicators": 0, "obligation_sum": "0",
+                      "delta_column": delta,
                       "uncompressed_bytes": info.file_size}
             total = None
             writer = None
@@ -132,10 +161,11 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16) -> d
                         continue
                     typed, stats = type_batch(batch, info.filename, row, delta)
                     row += batch.num_rows
+                    require(out_dir, typed.nbytes, reserve_gib)
                     if writer is None:
                         writer = parquet.ParquetWriter(target, typed.schema, compression="zstd")
                     writer.write_table(typed, row_group_size=256_000)
-                    for key in ("rows", "bad_money", "bad_dates", "blank_keys"):
+                    for key in ("rows", "bad_money", "bad_dates", "blank_keys", "bad_indicators"):
                         member[key] += stats[key]
                     value = pa.scalar(stats["obligation_sum"]).cast(MONEY).as_py()
                     total = value if total is None else total + value
@@ -148,6 +178,7 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16) -> d
     report["bad_money"] = sum(m["bad_money"] for m in report["members"])
     report["bad_dates"] = sum(m["bad_dates"] for m in report["members"])
     report["blank_keys"] = sum(m["blank_keys"] for m in report["members"])
+    report["bad_indicators"] = sum(m["bad_indicators"] for m in report["members"])
     report["parquet_bytes"] = sum(m["parquet_bytes"] for m in report["members"])
     report["elapsed_seconds"] = round(time.monotonic() - started, 1)
     (out_dir / "_extract.json").write_text(json.dumps(report, indent=2))
@@ -158,14 +189,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("zip_path")
     parser.add_argument("out_dir")
+    parser.add_argument("--reserve-gib", type=float, default=8)
     args = parser.parse_args()
-    report = extract(args.zip_path, args.out_dir)
+    report = extract(args.zip_path, args.out_dir, reserve_gib=args.reserve_gib)
     print(json.dumps({k: v for k, v in report.items() if k != "members"}, indent=2))
-    # Unparseable values are kept as null and counted, never turned into zero. A handful are
-    # reported and carried into the summary checks; more than 1 in 10,000 rows stops the run.
-    bad = report["bad_money"] + report["bad_dates"]
-    if report["blank_keys"] or bad > report["rows"] / 10_000:
-        raise SystemExit("Typed extraction found too many unparseable values; see _extract.json")
+    # Unparseable values are kept as null and counted, never turned into zero, and any of them
+    # stops the run: one omitted obligation can dominate a total. Blank values are not errors.
+    if report["blank_keys"] or report["bad_money"] or report["bad_dates"] or report["bad_indicators"]:
+        raise SystemExit("Typed extraction found unparseable values; see _extract.json")
 
 
 if __name__ == "__main__":

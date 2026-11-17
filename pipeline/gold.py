@@ -38,10 +38,26 @@ def sql_list(values) -> str:
     return ", ".join("'" + v + "'" for v in values)
 
 
-def connect(silver_dir: str | Path) -> duckdb.DuckDBPyConnection:
+class QualityError(RuntimeError):
+    """A blocking data-quality check failed; no summary is produced."""
+
+
+def connect(silver_dir: str | Path, deleted_keys: str | Path | None = None,
+            temp_dir: str | Path | None = None) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect()
     con.execute("SET preserve_insertion_order = false")
+    # Bound spill to disk so a large query cannot eat the free-space reserve.
+    con.execute(f"SET temp_directory = '{Path(temp_dir or Path(silver_dir) / '_duckdb_tmp')}'")
+    con.execute("SET max_temp_directory_size = '2GiB'")
     pattern = str(Path(silver_dir) / "part-*.parquet")
+    if deleted_keys:
+        con.execute(f"CREATE TABLE deleted AS SELECT DISTINCT contract_transaction_unique_key AS k FROM read_parquet('{deleted_keys}')")
+    else:
+        con.execute("CREATE TABLE deleted (k VARCHAR)")
+    con.execute(f"""
+        CREATE VIEW source AS SELECT * FROM read_parquet('{pattern}')""")
+    con.execute("""
+        CREATE VIEW stale AS SELECT s.* FROM source s JOIN deleted d ON s.contract_transaction_unique_key = d.k""")
     territory_case = " ".join(f"WHEN country = '{c}' THEN '{s}'" for c, s in TERRITORY_COUNTRIES.items())
     con.execute(f"""
         CREATE VIEW tx AS
@@ -63,8 +79,9 @@ def connect(silver_dir: str | Path) -> duckdb.DuckDBPyConnection:
           SELECT *,
             upper(trim(primary_place_of_performance_state_code)) AS state,
             upper(trim(primary_place_of_performance_country_code)) AS country,
-            coalesce(federal_action_obligation, 0) AS amount
-          FROM read_parquet('{pattern}')
+            federal_action_obligation AS amount
+          FROM source s
+          WHERE NOT EXISTS (SELECT 1 FROM deleted d WHERE d.k = s.contract_transaction_unique_key)
         )
     """)
     return con
@@ -78,15 +95,28 @@ def cents(value) -> int:
     return int(quantized * 100)
 
 
-def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, source_zip: str, top: int = 10) -> dict:
-    con = connect(silver_dir)
+BLOCKING = ("duplicate_keys", "other_fiscal_year", "outside_fiscal_window", "null_obligations", "null_dates")
+
+
+def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, source_zip: str, top: int = 10,
+              deleted_keys: str | Path | None = None) -> dict:
+    con = connect(silver_dir, deleted_keys)
+    start, end = f"{fiscal_year - 1}-10-01", f"{fiscal_year}-09-30"
     checks = con.execute(f"""
         SELECT count(*) AS rows,
                count(*) - count(DISTINCT contract_transaction_unique_key) AS duplicate_keys,
                count(*) FILTER (WHERE action_date_fiscal_year <> '{fiscal_year}') AS other_fiscal_year,
+               count(*) FILTER (WHERE action_date < DATE '{start}' OR action_date > DATE '{end}') AS outside_fiscal_window,
                count(*) FILTER (WHERE federal_action_obligation IS NULL) AS null_obligations,
+               count(*) FILTER (WHERE action_date IS NULL) AS null_dates,
                count(*) FILTER (WHERE amount < 0) AS negative_rows
         FROM tx""").fetchone()
+    checks = dict(zip(("rows", "duplicate_keys", "other_fiscal_year", "outside_fiscal_window", "null_obligations",
+                       "null_dates", "negative_rows"), checks))
+    failed = {k: checks[k] for k in BLOCKING if checks[k]}
+    if failed:
+        raise QualityError(f"Blocking quality checks failed: {failed}")
+    stale = con.execute("SELECT count(*), sum(federal_action_obligation) FROM stale").fetchone()
     national = con.execute("""
         SELECT sum(amount), count(*), count(DISTINCT contract_award_unique_key) FROM tx""").fetchone()
 
@@ -161,8 +191,9 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
                             for c, a, n in territories],
             **{kind + "_cents": cents(amount) for kind, amount in places if kind != "state"},
         },
-        "checks": {"rows": checks[0], "duplicate_keys": checks[1], "other_fiscal_year": checks[2],
-                   "null_obligations": checks[3], "negative_rows": checks[4]},
+        "checks": checks,
+        "stale_rows_removed": {"rows": stale[0], "cents": cents(stale[1]),
+                               "reason": "Keys the same release's delta file marks as deleted"},
         "states": dict(sorted(states.items())),
     }
 
@@ -174,12 +205,15 @@ def main() -> None:
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--snapshot-date", required=True)
     parser.add_argument("--source-zip", required=True)
+    parser.add_argument("--deleted-keys", help="Parquet of transaction keys the delta file deletes")
     args = parser.parse_args()
-    result = summarise(args.silver_dir, args.year, args.snapshot_date, args.source_zip)
+    result = summarise(args.silver_dir, args.year, args.snapshot_date, args.source_zip,
+                       deleted_keys=args.deleted_keys)
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(result, indent=1))
     print(json.dumps({"national_cents": result["national"]["net_obligations_cents"], "states": len(result["states"]),
-                      "checks": result["checks"], "outside_map": {k: v for k, v in result["outside_map"].items()
+                      "checks": result["checks"], "stale_rows_removed": result["stale_rows_removed"],
+                      "outside_map": {k: v for k, v in result["outside_map"].items()
                                                                   if k != "territories"}}, indent=2))
 
 

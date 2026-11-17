@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Money Trail: where federal contract money goes</title>
+  <meta name="description" content="Federal contract obligations by state and fiscal year, from USAspending.gov, with the agencies and companies behind each total.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#state-table">Skip to the state table</a>
+
+  <header class="masthead">
+    <div class="brand">
+      <p class="wordmark">Money Trail</p>
+      <p class="tagline">Where federal contract money goes, state by state</p>
+    </div>
+    <nav class="controls" aria-label="Map controls">
+      <div class="years" role="group" aria-label="Fiscal year">
+        <span class="control-name" id="year-label">Fiscal year</span>
+        <div class="year-buttons" id="year-buttons" aria-labelledby="year-label"></div>
+        <button type="button" class="play" id="play" aria-pressed="false">Play years</button>
+      </div>
+      <div class="measure" role="radiogroup" aria-labelledby="measure-label">
+        <span class="control-name" id="measure-label">Show</span>
+        <label><input type="radio" name="measure" value="total" checked> Total</label>
+        <label><input type="radio" name="measure" value="per_resident"> Per resident</label>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="lede" id="lede">Loading federal contract records…</h1>
+
+    <section class="atlas" aria-label="Map and state detail">
+      <figure class="map-wrap">
+        <svg id="map" viewBox="0 0 975 610" role="group" aria-label="Map of the United States. Select a state for detail."></svg>
+        <figcaption>
+          <div class="legend" id="legend" aria-hidden="true"></div>
+          <p class="map-note" id="map-note"></p>
+        </figcaption>
+        <div class="tip" id="tip" role="status" aria-live="polite" hidden></div>
+      </figure>
+
+      <aside class="panel" id="panel" aria-live="polite"></aside>
+    </section>
+
+    <section class="outside" aria-labelledby="outside-title">
+      <h2 id="outside-title">Not on the map</h2>
+      <p class="section-intro">Money the records place outside the 50 states and DC, or nowhere at all. It is part of the national total.</p>
+      <div class="outside-grid" id="outside"></div>
+    </section>
+
+    <section class="table-section" aria-labelledby="table-title">
+      <h2 id="table-title">All states</h2>
+      <p class="section-intro">Select a column heading to sort. Select a state to open its detail above.</p>
+      <div class="table-scroll">
+        <table id="state-table">
+          <thead>
+            <tr>
+              <th scope="col"><button type="button" data-sort="name">State</button></th>
+              <th scope="col" class="num"><button type="button" data-sort="net">Net obligations</button></th>
+              <th scope="col" class="num"><button type="button" data-sort="per">Per resident</button></th>
+              <th scope="col" class="num"><button type="button" data-sort="change">Change on prior year</button></th>
+              <th scope="col">Largest agency</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="about" aria-labelledby="about-title">
+      <h2 id="about-title">About these numbers</h2>
+      <div class="about-columns">
+        <div>
+          <h3>What is counted</h3>
+          <p>Every prime contract transaction in Treasury's national archive for each fiscal year, including indefinite-delivery vehicles. The figure is <em>net obligations</em>: money agencies legally committed, minus money they took back. It is not money paid out.</p>
+          <p>Place means where the work is performed, not where the company is based. A Virginia contractor building a ship in Maine counts for Maine.</p>
+        </div>
+        <div>
+          <h3>Checked against the official site</h3>
+          <div id="reconciliation"></div>
+        </div>
+        <div>
+          <h3>Limits</h3>
+          <ul>
+            <li>Treasury and the Government Accountability Office report that the source data is incomplete and contains errors.</li>
+            <li>Grants, loans and other assistance are not included yet.</li>
+            <li>Amounts are nominal dollars, not adjusted for inflation.</li>
+            <li>Per-resident figures use the state populations USAspending publishes.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="source" id="source"></p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Built from public data at <a href="https://www.usaspending.gov">USAspending.gov</a>. Code and method on <a href="https://github.com/mintyfizz/money-trail">GitHub</a>.</p>
+  </footer>
+
+  <script src="vendor/d3.min.js"></script>
+  <script src="vendor/topojson-client.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

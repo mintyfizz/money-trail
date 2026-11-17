@@ -2,10 +2,10 @@
 
 Two independent methods:
 
-* `delta_summary` reads Treasury's monthly delta file. Its `correction_delete_ind` marks each row:
-  blank = new transaction, C = correction of an existing transaction, D = deletion.
-  A correction row carries the corrected values only, so it is counted, not turned into a
-  dollar change. A negative obligation is a de-obligation, never called a cancellation.
+* `delta_summary` reads Treasury's monthly delta file. Its indicator marks C (correction) and D
+  (deletion); a blank flag can be a new row or an update, so the two are reported together.
+  Rows carry current values only, so no dollar change is inferred. A negative obligation is a
+  de-obligation, never called a cancellation.
 * `diff_snapshots` compares two typed snapshots by transaction key: added, removed, amount changed.
   An identical pair of snapshots produces no changes.
 """
@@ -26,6 +26,13 @@ def _view(con, name: str, directory: str | Path) -> None:
 
 
 def delta_summary(delta_dir: str | Path, years: list[int]) -> dict:
+    """Summarise one monthly delta file, claiming only what its rows support.
+
+    A blank indicator does not prove a row is new: Treasury's generator also emits updated rows with
+    a blank flag. So blank and C rows are reported together as "added or updated", with the C count
+    shown separately. D rows are tombstones whose amount, date and place are blank, so they are
+    counted on their own and never assigned to a state or year.
+    """
     con = duckdb.connect()
     _view(con, "delta", delta_dir)
     year_list = sql_list(str(y) for y in years)
@@ -33,69 +40,91 @@ def delta_summary(delta_dir: str | Path, years: list[int]) -> dict:
         SELECT action_date_fiscal_year AS fy,
                CASE WHEN upper(trim(primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
                     THEN upper(trim(primary_place_of_performance_state_code)) ELSE 'OTHER' END AS place,
-               CASE upper(trim(correction_delete_ind)) WHEN 'D' THEN 'deleted' WHEN 'C' THEN 'corrected'
-                    ELSE 'new' END AS kind,
                count(*) AS n,
+               count(*) FILTER (WHERE correction_delete_ind = 'C') AS flagged,
                sum(coalesce(federal_action_obligation, 0)) AS amount,
                count(*) FILTER (WHERE federal_action_obligation < 0) AS deobligation_rows,
                sum(federal_action_obligation) FILTER (WHERE federal_action_obligation < 0) AS deobligated
         FROM delta
-        WHERE action_date_fiscal_year IN ({year_list}) OR upper(trim(correction_delete_ind)) = 'D'
-        GROUP BY 1, 2, 3""").fetchall()
-    undated_deletions = con.execute(f"""
-        SELECT count(*) FROM delta
-        WHERE upper(trim(correction_delete_ind)) = 'D' AND action_date_fiscal_year NOT IN ({year_list})""").fetchone()[0]
-    out: dict = {"method": "monthly delta file", "years": {}, "deletions_without_listed_year": undated_deletions}
-    for fy, place, kind, n, amount, deob_rows, deob in rows:
-        if fy not in [str(y) for y in years]:
-            continue
-        state = out["years"].setdefault(fy, {}).setdefault(place, {
-            "new_rows": 0, "new_cents": 0, "corrected_rows": 0, "deleted_rows": 0,
-            "deobligation_rows": 0, "deobligation_cents": 0})
-        if kind == "new":
-            state["new_rows"] += n
-            state["new_cents"] += cents(amount)
-        elif kind == "corrected":
-            state["corrected_rows"] += n
-        else:
-            state["deleted_rows"] += n
-        if kind != "deleted":
-            state["deobligation_rows"] += deob_rows
-            state["deobligation_cents"] += cents(deob)
+        WHERE correction_delete_ind <> 'D' AND action_date_fiscal_year IN ({year_list})
+        GROUP BY 1, 2""").fetchall()
+    totals = con.execute("""
+        SELECT count(*) FILTER (WHERE correction_delete_ind <> 'D'),
+               count(*) FILTER (WHERE correction_delete_ind = 'C'),
+               count(*) FILTER (WHERE correction_delete_ind = 'D')
+        FROM delta""").fetchone()
+    out: dict = {
+        "method": "monthly delta file",
+        "meaning": ("Rows Treasury changed in its latest monthly release. 'Added or updated' cannot be split "
+                    "into new and changed rows without the previous month's full snapshot."),
+        "all_years": {"added_or_updated_rows": totals[0], "flagged_correction_rows": totals[1],
+                      "deleted_rows": totals[2]},
+        "years": {},
+    }
+    for fy, place, n, flagged, amount, deob_rows, deob in rows:
+        out["years"].setdefault(fy, {})[place] = {
+            "added_or_updated_rows": n, "flagged_correction_rows": flagged,
+            "obligations_on_these_rows_cents": cents(amount),
+            "deobligation_rows": deob_rows, "deobligation_cents": cents(deob)}
     return out
 
 
 def diff_snapshots(old_dir: str | Path, new_dir: str | Path) -> dict:
+    """Compare two snapshots by transaction key, place by place, including rows that moved state.
+
+    A key whose amount or place changed is "changed". Each place's net change is the new amounts
+    now placed there minus the old amounts that were placed there, so a $100 row moved from CA to TX
+    shows -$100 for CA and +$100 for TX. Keys must be unique in each snapshot.
+    """
     con = duckdb.connect()
-    _view(con, "old", old_dir)
-    _view(con, "new", new_dir)
-    rows = con.execute(f"""
-        WITH joined AS (
-          SELECT o.contract_transaction_unique_key AS old_key, n.contract_transaction_unique_key AS new_key,
-                 o.federal_action_obligation AS old_amount, n.federal_action_obligation AS new_amount,
-                 coalesce(upper(trim(n.primary_place_of_performance_state_code)),
-                          upper(trim(o.primary_place_of_performance_state_code))) AS state
-          FROM old o FULL OUTER JOIN new n
-            ON o.contract_transaction_unique_key = n.contract_transaction_unique_key)
-        SELECT CASE WHEN state IN ({sql_list(STATES)}) THEN state ELSE 'OTHER' END AS place,
-               CASE WHEN old_key IS NULL THEN 'added'
-                    WHEN new_key IS NULL THEN 'removed'
-                    WHEN old_amount IS DISTINCT FROM new_amount THEN 'amount_changed'
-                    ELSE 'unchanged' END AS kind,
-               count(*),
-               sum(coalesce(new_amount, 0) - coalesce(old_amount, 0))
-        FROM joined GROUP BY 1, 2""").fetchall()
+    _view(con, "old_raw", old_dir)
+    _view(con, "new_raw", new_dir)
+    for name in ("old_raw", "new_raw"):
+        dupes = con.execute(f"SELECT count(*) - count(DISTINCT contract_transaction_unique_key) FROM {name}").fetchone()[0]
+        if dupes:
+            raise ValueError(f"{name} has {dupes} duplicate transaction keys; snapshots cannot be compared")
+    place = f"""CASE WHEN upper(trim(primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
+                     THEN upper(trim(primary_place_of_performance_state_code)) ELSE 'OTHER' END"""
+    for side in ("old", "new"):
+        con.execute(f"""CREATE VIEW {side} AS SELECT contract_transaction_unique_key AS k, {place} AS place,
+                        federal_action_obligation AS amount FROM {side}_raw""")
+    con.execute("""
+        CREATE TABLE joined AS
+        SELECT coalesce(o.k, n.k) AS k, o.place AS old_place, n.place AS new_place,
+               o.amount AS old_amount, n.amount AS new_amount,
+               CASE WHEN o.k IS NULL THEN 'added' WHEN n.k IS NULL THEN 'removed'
+                    WHEN o.amount IS DISTINCT FROM n.amount OR o.place IS DISTINCT FROM n.place THEN 'changed'
+                    ELSE 'unchanged' END AS kind
+        FROM old o FULL OUTER JOIN new n ON o.k = n.k""")
+    totals = dict(con.execute("SELECT kind, count(*) FROM joined GROUP BY 1").fetchall())
+    moved = con.execute("SELECT count(*) FROM joined WHERE kind = 'changed' AND old_place IS DISTINCT FROM new_place").fetchone()[0]
+    rows = con.execute("""
+        WITH effects AS (
+          SELECT new_place AS place, kind, coalesce(new_amount, 0) AS delta FROM joined
+            WHERE kind IN ('added', 'changed')
+          UNION ALL
+          SELECT old_place AS place, kind, -coalesce(old_amount, 0) AS delta FROM joined
+            WHERE kind IN ('removed', 'changed'))
+        SELECT place, kind, count(*), sum(delta) FROM effects GROUP BY 1, 2""").fetchall()
     places: dict = {}
-    totals = {"added": 0, "removed": 0, "amount_changed": 0, "unchanged": 0, "net_change_cents": 0}
-    for place, kind, n, change in rows:
-        entry = places.setdefault(place, {"added": 0, "removed": 0, "amount_changed": 0, "unchanged": 0,
-                                          "net_change_cents": 0})
+    for place_code, kind, n, delta in rows:
+        entry = places.setdefault(place_code, {"added": 0, "removed": 0, "changed": 0, "net_change_cents": 0})
         entry[kind] += n
-        totals[kind] += n
-        delta = cents(change if change is not None else Decimal(0))
-        entry["net_change_cents"] += delta
-        totals["net_change_cents"] += delta
-    return {"method": "snapshot comparison by transaction key", "totals": totals, "places": places}
+        entry["net_change_cents"] += cents(delta)
+    summary = {k: totals.get(k, 0) for k in ("added", "removed", "changed", "unchanged")}
+    summary["moved_place"] = moved
+    summary["net_change_cents"] = sum(p["net_change_cents"] for p in places.values())
+    return {"method": "snapshot comparison by transaction key", "totals": summary, "places": places}
+
+
+def deleted_keys(delta_dir: str | Path, output: str | Path) -> int:
+    """Write the transaction keys a delta file marks as deleted (its tombstone rows)."""
+    con = duckdb.connect()
+    _view(con, "delta", delta_dir)
+    con.execute(f"""COPY (SELECT DISTINCT contract_transaction_unique_key FROM delta
+                         WHERE correction_delete_ind = 'D' ORDER BY 1)
+                   TO '{output}' (FORMAT parquet, COMPRESSION zstd)""")
+    return con.execute(f"SELECT count(*) FROM read_parquet('{output}')").fetchone()[0]
 
 
 def main() -> None:
@@ -105,11 +134,17 @@ def main() -> None:
     d.add_argument("delta_dir")
     d.add_argument("output")
     d.add_argument("--years", type=int, nargs="+", required=True)
+    k = sub.add_parser("deleted-keys")
+    k.add_argument("delta_dir")
+    k.add_argument("output")
     s = sub.add_parser("diff")
     s.add_argument("old_dir")
     s.add_argument("new_dir")
     s.add_argument("output")
     args = parser.parse_args()
+    if args.command == "deleted-keys":
+        print(json.dumps({"deleted_keys": deleted_keys(args.delta_dir, args.output)}))
+        return
     result = delta_summary(args.delta_dir, args.years) if args.command == "delta" else \
         diff_snapshots(args.old_dir, args.new_dir)
     Path(args.output).write_text(json.dumps(result, indent=1))

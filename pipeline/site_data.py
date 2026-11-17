@@ -30,12 +30,13 @@ def build(inputs: str | Path, output: str | Path) -> dict:
             "official_queried_at": rec["official_queried_at"], "definition": rec["definition"],
             **{part: {k: v for k, v in rec[part].items() if k != "rows"} for part in ("contracts", "idvs")}}
         summary["changes"] = None if delta is None else {
-            "method": delta["method"], "source_file": delta.get("source_file"),
+            "method": delta["method"], "meaning": delta.get("meaning"), "all_years": delta.get("all_years"),
+            "source_file": delta.get("source_file"),
             "snapshot_date": delta.get("snapshot_date"), "outside_states": year_changes.get("OTHER")}
         (output / f"fy{year}.json").write_text(json.dumps(summary, separators=(",", ":")))
         years.append({"fiscal_year": year, "snapshot_date": summary["snapshot_date"],
                       "net_obligations_cents": summary["national"]["net_obligations_cents"],
-                      "reconciled": rec is not None})
+                      "reconciliation_status": (rec or {}).get("contracts", {}).get("status", "not run")})
     if not years:
         raise SystemExit("No year summaries found")
     index = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

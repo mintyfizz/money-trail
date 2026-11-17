@@ -1,0 +1,2 @@
+d3 7.9.2 (ISC), topojson-client 3.1.0 (ISC), us-atlas 3.0.1 (ISC; US Census Bureau cartographic boundaries).
+Fonts: Public Sans and Spectral, SIL Open Font License 1.1, via Fontsource.
