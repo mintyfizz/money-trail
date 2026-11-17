@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 from pathlib import Path
 import shutil
 
@@ -22,6 +23,65 @@ def require(path: str | Path, needed_bytes: int, reserve_gib: float = 8) -> int:
     if free - needed_bytes < reserve:
         raise RuntimeError(f"Disk reserve: {free} bytes free, {needed_bytes} needed, {reserve} must stay free")
     return free
+
+
+class GuardedFile(io.BufferedIOBase):
+    """A binary file that checks the reserve before every write, including Parquet footers."""
+
+    def __init__(self, path: str | Path, reserve_gib: float = 8):
+        self.path = Path(path)
+        self.reserve_gib = reserve_gib
+        self.stream = self.path.open("xb")
+        self.written = 0
+
+    def writable(self) -> bool:
+        return True
+
+    def tell(self) -> int:
+        return self.stream.tell()
+
+    def write(self, data) -> int:
+        size = len(memoryview(data).cast("B"))
+        require(self.path.parent, size, self.reserve_gib)
+        count = self.stream.write(data)
+        self.written += count
+        return count
+
+    def flush(self) -> None:
+        if not self.stream.closed:
+            self.stream.flush()
+
+    def close(self) -> None:
+        if not self.closed:
+            try:
+                self.flush()
+            finally:
+                self.stream.close()
+                super().close()
+
+
+MIN_SPILL = 256 * 1024 ** 2
+MAX_SPILL = 2 * GIB
+
+
+def spill_allowance(path: str | Path, reserve_gib: float = 8) -> int:
+    """Bytes DuckDB may spill without crossing the reserve: free minus reserve, capped at 2 GiB."""
+    room = free_bytes(path) - int(reserve_gib * GIB)
+    if room < MIN_SPILL:
+        raise RuntimeError(f"Disk reserve: only {room} bytes above the reserve; at least {MIN_SPILL} needed for query spill")
+    return min(room, MAX_SPILL)
+
+
+def duckdb_connect(temp_dir: str | Path, reserve_gib: float = 8):
+    """A DuckDB connection whose spill to disk is limited to what fits above the reserve."""
+    import duckdb
+    temp_dir = Path(temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    allowance = spill_allowance(temp_dir, reserve_gib)
+    con = duckdb.connect()
+    con.execute(f"SET temp_directory = '{temp_dir}'")
+    con.execute(f"SET max_temp_directory_size = '{allowance}B'")
+    return con
 
 
 def main() -> None:

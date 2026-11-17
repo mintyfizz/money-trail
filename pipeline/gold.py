@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 
 import duckdb
+
+from pipeline.guard import duckdb_connect
 from decimal import Decimal
 
 STATES = {
@@ -43,12 +45,10 @@ class QualityError(RuntimeError):
 
 
 def connect(silver_dir: str | Path, deleted_keys: str | Path | None = None,
-            temp_dir: str | Path | None = None) -> duckdb.DuckDBPyConnection:
-    con = duckdb.connect()
+            temp_dir: str | Path | None = None, reserve_gib: float = 8) -> duckdb.DuckDBPyConnection:
+    # Spill to disk is limited to the space above the reserve (at most 2 GiB).
+    con = duckdb_connect(temp_dir or Path(silver_dir).parent / "_duckdb_tmp", reserve_gib)
     con.execute("SET preserve_insertion_order = false")
-    # Bound spill to disk so a large query cannot eat the free-space reserve.
-    con.execute(f"SET temp_directory = '{Path(temp_dir or Path(silver_dir) / '_duckdb_tmp')}'")
-    con.execute("SET max_temp_directory_size = '2GiB'")
     pattern = str(Path(silver_dir) / "part-*.parquet")
     if deleted_keys:
         con.execute(f"CREATE TABLE deleted AS SELECT DISTINCT contract_transaction_unique_key AS k FROM read_parquet('{deleted_keys}')")
@@ -99,8 +99,9 @@ BLOCKING = ("duplicate_keys", "other_fiscal_year", "outside_fiscal_window", "nul
 
 
 def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, source_zip: str, top: int = 10,
-              deleted_keys: str | Path | None = None) -> dict:
-    con = connect(silver_dir, deleted_keys)
+              deleted_keys: str | Path | None = None, stale_out: str | Path | None = None,
+              reserve_gib: float = 8) -> dict:
+    con = connect(silver_dir, deleted_keys, reserve_gib=reserve_gib)
     start, end = f"{fiscal_year - 1}-10-01", f"{fiscal_year}-09-30"
     checks = con.execute(f"""
         SELECT count(*) AS rows,
@@ -117,6 +118,15 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
     if failed:
         raise QualityError(f"Blocking quality checks failed: {failed}")
     stale = con.execute("SELECT count(*), sum(federal_action_obligation) FROM stale").fetchone()
+    full = con.execute("SELECT count(*), sum(federal_action_obligation) FROM source").fetchone()
+    deleted_listed = con.execute("SELECT count(*) FROM deleted").fetchone()[0]
+    if stale_out:
+        # Audit trail: every row removed, with where it came from, so the exclusion can be checked.
+        con.execute(f"""COPY (SELECT contract_transaction_unique_key, contract_award_unique_key, federal_action_obligation,
+                                     federal_action_obligation_raw, action_date_raw, last_modified_date,
+                                     primary_place_of_performance_state_code, source_file, source_row
+                              FROM stale ORDER BY source_file, source_row)
+                       TO '{stale_out}' (FORMAT parquet, COMPRESSION zstd)""")
     national = con.execute("""
         SELECT sum(amount), count(*), count(DISTINCT contract_award_unique_key) FROM tx""").fetchone()
 
@@ -193,7 +203,10 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
         },
         "checks": checks,
         "stale_rows_removed": {"rows": stale[0], "cents": cents(stale[1]),
+                               "deleted_keys_listed": deleted_listed,
                                "reason": "Keys the same release's delta file marks as deleted"},
+        "full_snapshot": {"rows": full[0], "net_obligations_cents": cents(full[1]),
+                          "note": "The source file as published, before stale keys are removed"},
         "states": dict(sorted(states.items())),
     }
 
@@ -206,13 +219,16 @@ def main() -> None:
     parser.add_argument("--snapshot-date", required=True)
     parser.add_argument("--source-zip", required=True)
     parser.add_argument("--deleted-keys", help="Parquet of transaction keys the delta file deletes")
+    parser.add_argument("--stale-out", help="write the removed rows here for audit")
+    parser.add_argument("--reserve-gib", type=float, default=8)
     args = parser.parse_args()
     result = summarise(args.silver_dir, args.year, args.snapshot_date, args.source_zip,
-                       deleted_keys=args.deleted_keys)
+                       deleted_keys=args.deleted_keys, stale_out=args.stale_out, reserve_gib=args.reserve_gib)
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(result, indent=1))
     print(json.dumps({"national_cents": result["national"]["net_obligations_cents"], "states": len(result["states"]),
                       "checks": result["checks"], "stale_rows_removed": result["stale_rows_removed"],
+                      "full_snapshot": result["full_snapshot"],
                       "outside_map": {k: v for k, v in result["outside_map"].items()
                                                                   if k != "territories"}}, indent=2))
 

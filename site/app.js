@@ -196,10 +196,16 @@
 
   function reconciliationLine(s) {
     const r = s.reconciliation && s.reconciliation.contracts;
-    if (!r) return "";
-    const gap = Math.abs(r.gap_pct ?? 0);
-    const verdict = gap <= 0.1 ? "matches" : gap <= 1 ? "is close to" : "differs from";
-    return `<p class="check">Contract total (excluding indefinite-delivery vehicles) ${verdict} USAspending's published figure of ${money(r.official_cents)}${gap > 0.1 ? `, a gap of ${money(r.gap_cents)} (${d3.format(".2f")(r.gap_pct)}%)` : ""}.</p>`;
+    if (!r) return `<p class="check">Not yet compared with USAspending's published figure.</p>`;
+    const lead = "Contracts excluding indefinite-delivery vehicles";
+    if (r.official_cents === null || r.official_cents === undefined || r.ours_cents === null || r.ours_cents === undefined) {
+      return `<p class="check">${lead}: could not be compared, because ${r.official_cents == null ? "USAspending's" : "this project's"} figure is missing.</p>`;
+    }
+    if (r.official_cents === 0) {
+      return `<p class="check">${lead}: USAspending publishes $0 for this state; this project finds ${money(r.ours_cents)}.${r.ours_cents ? " That difference cannot be expressed as a percentage and fails the check." : ""}</p>`;
+    }
+    const within = Math.abs(r.gap_pct) <= 1;
+    return `<p class="check">${lead}: ${money(r.ours_cents)} here against ${money(r.official_cents)} published by USAspending, a difference of ${money(r.gap_cents)} (${d3.format("+.3f")(r.gap_pct)}%), ${within ? "within" : "outside"} the 1% tolerance per state.</p>`;
   }
 
   function changesBlock(s) {
@@ -254,7 +260,7 @@
     const o = yearData().outside_map;
     const terr = (o.territories || []).slice(0, 4).map((t) => `${esc(t.name)} ${money(t.amount_cents)}`).join("; ");
     const items = [
-      ["Territories", o.territory_cents ?? 0, terr || "None recorded"],
+      ["Territories and freely associated states", o.territory_cents ?? 0, terr || "None recorded"],
       ["Outside the United States", o.foreign_cents ?? 0, "Work performed abroad, by country code"],
       ["No location recorded", o.unknown_cents ?? 0, "Transactions with no place of performance in the record"],
     ];
@@ -275,6 +281,8 @@
         agency: s.agencies[0] ? titleCase(s.agencies[0].name) : "",
       };
     });
+    const hasPrior = state.years.includes(state.year - 1);
+    document.querySelectorAll('#state-table [data-col="change"]').forEach((el) => { el.hidden = !hasPrior; });
     const { key, dir } = state.sort;
     rows.sort((a, b) => {
       const av = a[key], bv = b[key];
@@ -298,15 +306,21 @@
 
   /* ---------- About ---------- */
   function renderAbout() {
+    const words = { passed: "passed", gaps: "did not pass", incomplete: "incomplete" };
     const parts = state.years.map((y) => {
       const r = state.data[y].reconciliation;
-      if (!r) return `<li>FY${y}: not yet checked.</li>`;
+      if (!r) return `<li>FY${y}: not yet compared.</li>`;
       const c = r.contracts;
-      return `<li>FY${y}: the 50 states and DC total ${money(c.total_ours_cents)} against USAspending's ${money(c.total_official_cents)} (${d3.format("+.3f")(c.total_gap_pct)}%). ${c.states_within_0_1_pct} of 51 states match within 0.1%.</li>`;
+      const compared = 51 - new Set([...(c.missing_ours || []), ...(c.missing_official || [])]).size;
+      return `<li>FY${y}: check <strong>${words[c.status] || c.status}</strong>. For the ${compared} of 51 places compared, this project totals ${money(c.total_ours_cents)} against USAspending's ${money(c.total_official_cents)} (${c.total_gap_pct === null ? "no percentage" : d3.format("+.3f")(c.total_gap_pct) + "%"}). ${c.states_within_1_pct} places are within 1%, ${c.states_within_0_1_pct} within 0.1%.</li>`;
     });
-    $("reconciliation").innerHTML = `<p>Each state's contract total is compared with USAspending's own published figure, using the same dates, place and contract types. The official figures are live, so small gaps from records updated after the archive was made are expected.</p><ul>${parts.join("")}</ul>`;
+    $("reconciliation").innerHTML = `<p>Each state's contract total is compared with USAspending's own published figure, using the same dates, place and contract types. The check passes only if all 51 places are present, the national gap is within 0.1% and every place is within 1%. USAspending's figures are live, so records updated after the archive was made can open small gaps.</p><ul>${parts.join("")}</ul>`;
     const d = yearData();
-    $("source").textContent = `Source: Treasury's national contracts archive for fiscal year ${d.fiscal_year} (${d.source_zip}, snapshot ${d.snapshot_date}). Summaries generated ${d.generated_at.slice(0, 10)}.`;
+    const stale = d.stale_rows_removed;
+    const cleaned = stale && stale.rows
+      ? ` Before counting, ${d3.format(",")(stale.rows)} stale rows (${money(stale.cents)}) were removed: their keys are listed as deleted in Treasury's delta file of the same date. As published, the file totals ${money(d.full_snapshot.net_obligations_cents)}.`
+      : "";
+    $("source").textContent = `Source: Treasury's national contracts archive for fiscal year ${d.fiscal_year} (${d.source_zip}, snapshot ${d.snapshot_date}).${cleaned} Summaries generated ${d.generated_at.slice(0, 10)}.`;
   }
 
   /* ---------- Controls ---------- */

@@ -282,6 +282,52 @@ class BuildTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 silver.extract(z, self.root / "space")
 
+
+    def test_guarded_writer_counts_parquet_footer(self):
+        from pipeline import guard
+        z = self.root / "tiny.zip"
+        write_zip(z, {"x.csv": [row("G1", "1.00")]})
+        # 2 KB above the reserve: more than one row's in-memory size, less than a Parquet file.
+        with mock.patch("pipeline.guard.free_bytes", return_value=8 * guard.GIB + 2048):
+            with self.assertRaises(RuntimeError):
+                silver.extract(z, self.root / "tiny")
+
+    def test_spill_allowance_respects_reserve(self):
+        from pipeline import guard
+        with mock.patch("pipeline.guard.free_bytes", return_value=int(8.5 * guard.GIB)):
+            self.assertEqual(guard.spill_allowance(self.root, 8), guard.GIB // 2)
+        with mock.patch("pipeline.guard.free_bytes", return_value=8 * guard.GIB + 1024):
+            with self.assertRaises(RuntimeError):
+                guard.spill_allowance(self.root, 8)
+
+    def test_same_place_correction_counts_once(self):
+        old = self.summary_of([row("C9", "100.00", state="CA")])
+        new = self.summary_of([row("C9", "90.00", state="CA")])
+        result = changes.diff_snapshots(old, new)
+        self.assertEqual(result["places"]["CA"]["changed"], 1)
+        self.assertEqual(result["places"]["CA"]["net_change_cents"], -1000)
+        self.assertIn("place of performance only", result["scope"])
+
+    def test_delta_rows_other_than_deletions_need_amounts(self):
+        delta_zip = self.root / "badDelta.zip"
+        write_zip(delta_zip, {"d.csv": [{**row("N1", ""), "correction_delete_ind": ""}]}, delta=True)
+        silver.extract(delta_zip, self.root / "bad_delta")
+        with self.assertRaises(changes.DeltaQualityError):
+            changes.delta_summary(self.root / "bad_delta", [2025])
+
+    def test_stale_audit_file_and_full_totals(self):
+        import pyarrow as pa, pyarrow.parquet as pq
+        out = self.summary_of([row("OLD_2", "440.00"), row("NEW_14", "440.00")])
+        deleted = self.root / "deleted2.parquet"
+        pq.write_table(pa.table({"contract_transaction_unique_key": ["OLD_2"]}), deleted)
+        audit = self.root / "stale.parquet"
+        result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted, stale_out=audit)
+        self.assertEqual(result["full_snapshot"]["net_obligations_cents"], 88000)
+        self.assertEqual(result["national"]["net_obligations_cents"], 44000)
+        rows = pq.read_table(audit).to_pylist()
+        self.assertEqual([r["contract_transaction_unique_key"] for r in rows], ["OLD_2"])
+        self.assertEqual(rows[0]["source_row"], 2)
+
     def test_fetch_picks_latest_file(self):
         from pipeline import fetch
         files = [{"file_name": "FY2025_All_Contracts_Full_20261006.zip", "url": "u1"},

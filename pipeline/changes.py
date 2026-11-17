@@ -16,16 +16,19 @@ from decimal import Decimal
 import json
 from pathlib import Path
 
-import duckdb
-
 from pipeline.gold import STATES, cents, sql_list
+from pipeline.guard import duckdb_connect
 
 
 def _view(con, name: str, directory: str | Path) -> None:
     con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{Path(directory) / 'part-*.parquet'}')")
 
 
-def delta_summary(delta_dir: str | Path, years: list[int]) -> dict:
+class DeltaQualityError(RuntimeError):
+    """An added or updated delta row lacks a valid amount, date or fiscal year."""
+
+
+def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 8) -> dict:
     """Summarise one monthly delta file, claiming only what its rows support.
 
     A blank indicator does not prove a row is new: Treasury's generator also emits updated rows with
@@ -33,16 +36,24 @@ def delta_summary(delta_dir: str | Path, years: list[int]) -> dict:
     shown separately. D rows are tombstones whose amount, date and place are blank, so they are
     counted on their own and never assigned to a state or year.
     """
-    con = duckdb.connect()
+    con = duckdb_connect(Path(delta_dir).parent / "_duckdb_tmp", reserve_gib)
     _view(con, "delta", delta_dir)
     year_list = sql_list(str(y) for y in years)
+    # Only deletion tombstones may omit amount, date and fiscal year.
+    invalid = con.execute("""
+        SELECT count(*) FILTER (WHERE federal_action_obligation IS NULL),
+               count(*) FILTER (WHERE action_date IS NULL),
+               count(*) FILTER (WHERE trim(action_date_fiscal_year) = '')
+        FROM delta WHERE correction_delete_ind <> 'D'""").fetchone()
+    if any(invalid):
+        raise DeltaQualityError(f"Added or updated delta rows missing amount/date/fiscal year: {invalid}")
     rows = con.execute(f"""
         SELECT action_date_fiscal_year AS fy,
                CASE WHEN upper(trim(primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
                     THEN upper(trim(primary_place_of_performance_state_code)) ELSE 'OTHER' END AS place,
                count(*) AS n,
                count(*) FILTER (WHERE correction_delete_ind = 'C') AS flagged,
-               sum(coalesce(federal_action_obligation, 0)) AS amount,
+               sum(federal_action_obligation) AS amount,
                count(*) FILTER (WHERE federal_action_obligation < 0) AS deobligation_rows,
                sum(federal_action_obligation) FILTER (WHERE federal_action_obligation < 0) AS deobligated
         FROM delta
@@ -69,20 +80,26 @@ def delta_summary(delta_dir: str | Path, years: list[int]) -> dict:
     return out
 
 
-def diff_snapshots(old_dir: str | Path, new_dir: str | Path) -> dict:
+def diff_snapshots(old_dir: str | Path, new_dir: str | Path, reserve_gib: float = 8) -> dict:
     """Compare two snapshots by transaction key, place by place, including rows that moved state.
+
+    Scope: amount and place of performance only. Changes to agency, recipient or other fields are
+    not detected, and the two snapshots must cover the same scope (same fiscal year and award type).
 
     A key whose amount or place changed is "changed". Each place's net change is the new amounts
     now placed there minus the old amounts that were placed there, so a $100 row moved from CA to TX
     shows -$100 for CA and +$100 for TX. Keys must be unique in each snapshot.
     """
-    con = duckdb.connect()
+    con = duckdb_connect(Path(new_dir).parent / "_duckdb_tmp", reserve_gib)
     _view(con, "old_raw", old_dir)
     _view(con, "new_raw", new_dir)
     for name in ("old_raw", "new_raw"):
         dupes = con.execute(f"SELECT count(*) - count(DISTINCT contract_transaction_unique_key) FROM {name}").fetchone()[0]
         if dupes:
             raise ValueError(f"{name} has {dupes} duplicate transaction keys; snapshots cannot be compared")
+        nulls = con.execute(f"SELECT count(*) FROM {name} WHERE federal_action_obligation IS NULL").fetchone()[0]
+        if nulls:
+            raise ValueError(f"{name} has {nulls} rows without an amount; snapshots cannot be compared")
     place = f"""CASE WHEN upper(trim(primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
                      THEN upper(trim(primary_place_of_performance_state_code)) ELSE 'OTHER' END"""
     for side in ("old", "new"):
@@ -100,12 +117,12 @@ def diff_snapshots(old_dir: str | Path, new_dir: str | Path) -> dict:
     moved = con.execute("SELECT count(*) FROM joined WHERE kind = 'changed' AND old_place IS DISTINCT FROM new_place").fetchone()[0]
     rows = con.execute("""
         WITH effects AS (
-          SELECT new_place AS place, kind, coalesce(new_amount, 0) AS delta FROM joined
+          SELECT k, new_place AS place, kind, coalesce(new_amount, 0) AS delta FROM joined
             WHERE kind IN ('added', 'changed')
           UNION ALL
-          SELECT old_place AS place, kind, -coalesce(old_amount, 0) AS delta FROM joined
+          SELECT k, old_place AS place, kind, -coalesce(old_amount, 0) AS delta FROM joined
             WHERE kind IN ('removed', 'changed'))
-        SELECT place, kind, count(*), sum(delta) FROM effects GROUP BY 1, 2""").fetchall()
+        SELECT place, kind, count(DISTINCT k), sum(delta) FROM effects GROUP BY 1, 2""").fetchall()
     places: dict = {}
     for place_code, kind, n, delta in rows:
         entry = places.setdefault(place_code, {"added": 0, "removed": 0, "changed": 0, "net_change_cents": 0})
@@ -114,12 +131,14 @@ def diff_snapshots(old_dir: str | Path, new_dir: str | Path) -> dict:
     summary = {k: totals.get(k, 0) for k in ("added", "removed", "changed", "unchanged")}
     summary["moved_place"] = moved
     summary["net_change_cents"] = sum(p["net_change_cents"] for p in places.values())
-    return {"method": "snapshot comparison by transaction key", "totals": summary, "places": places}
+    return {"method": "snapshot comparison by transaction key",
+            "scope": "amount and place of performance only; agency and recipient changes are not detected",
+            "totals": summary, "places": places}
 
 
 def deleted_keys(delta_dir: str | Path, output: str | Path) -> int:
     """Write the transaction keys a delta file marks as deleted (its tombstone rows)."""
-    con = duckdb.connect()
+    con = duckdb_connect(Path(delta_dir).parent / "_duckdb_tmp")
     _view(con, "delta", delta_dir)
     con.execute(f"""COPY (SELECT DISTINCT contract_transaction_unique_key FROM delta
                          WHERE correction_delete_ind = 'D' ORDER BY 1)

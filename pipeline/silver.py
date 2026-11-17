@@ -20,7 +20,7 @@ import pyarrow.compute as pc
 import pyarrow.csv as arrow_csv
 import pyarrow.parquet as parquet
 
-from pipeline.guard import require
+from pipeline.guard import GuardedFile
 
 COLUMNS = (
     "contract_transaction_unique_key", "contract_award_unique_key", "award_id_piid", "modification_number",
@@ -118,8 +118,8 @@ def type_batch(batch: pa.RecordBatch, source_file: str, first_row: int, delta: s
 def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, reserve_gib: float = 8) -> dict:
     """Write one typed Parquet file per CSV member. Never extracts the CSV to disk.
 
-    Before each batch is written, the in-memory size of the batch (an upper bound on its compressed
-    Parquet size) must fit while keeping `reserve_gib` free; otherwise the run stops.
+    Every byte written to Parquet, footer included, goes through a writer that checks the free-space
+    reserve first; crossing it stops the run.
     """
     zip_path, out_dir = Path(zip_path), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -161,9 +161,9 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, rese
                         continue
                     typed, stats = type_batch(batch, info.filename, row, delta)
                     row += batch.num_rows
-                    require(out_dir, typed.nbytes, reserve_gib)
                     if writer is None:
-                        writer = parquet.ParquetWriter(target, typed.schema, compression="zstd")
+                        sink = GuardedFile(target, reserve_gib)
+                        writer = parquet.ParquetWriter(sink, typed.schema, compression="zstd")
                     writer.write_table(typed, row_group_size=256_000)
                     for key in ("rows", "bad_money", "bad_dates", "blank_keys", "bad_indicators"):
                         member[key] += stats[key]
@@ -171,6 +171,7 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, rese
                     total = value if total is None else total + value
             if writer is not None:
                 writer.close()
+                sink.close()
             member["obligation_sum"] = str(total) if total is not None else "0"
             member["parquet_bytes"] = target.stat().st_size if target.exists() else 0
             report["members"].append(member)
