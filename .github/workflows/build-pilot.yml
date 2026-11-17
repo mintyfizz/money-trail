@@ -78,8 +78,8 @@ jobs:
           tag="build-delta-contracts-${date}-${GITHUB_SHA::7}"
           python -m pipeline.release --repository "$GITHUB_REPOSITORY" --tag "$tag" \
             --title "Monthly contracts delta, snapshot ${date}, code ${GITHUB_SHA::7}" \
-            --notes "Treasury's delta file and the transaction keys it marks as deleted, used to remove stale rows from the full files of the same date. Code: ${GITHUB_SHA}." \
-            --manifest out/release-delta.json \
+            --notes "Treasury's delta file, the transaction keys it marks as deleted, and the change summary. The deleted keys are matched against the full files of the same date as a diagnostic only; no rows are removed from the published totals. Code: ${GITHUB_SHA}." \
+            --manifest out/release-delta.json --target "$GITHUB_SHA" \
             "data/zip/$name" out/sha256-delta.txt out/deleted-keys.parquet out/extract-delta.json out/changes.json
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
@@ -163,7 +163,7 @@ jobs:
           python -m pipeline.release --repository "$GITHUB_REPOSITORY" --tag "$tag" \
             --title "FY${{ matrix.year }} national contracts, source snapshot ${DATE}, code ${GITHUB_SHA::7}" \
             --notes "Original Treasury archive, the typed transaction layer built from it by commit ${GITHUB_SHA}, and stale-rows.parquet: rows whose keys the same release's delta lists as deleted (diagnostic only, not removed from the totals). Keys come from deleted-keys.parquet (sha256 ${keys_sha}) in release ${DELTA_TAG}." \
-            --manifest out/release-fy${{ matrix.year }}.json \
+            --manifest out/release-fy${{ matrix.year }}.json --target "$GITHUB_SHA" \
             "data/zip/$NAME" data/sha256.txt data/silver/_extract.json data/stale-rows.parquet data/silver/part-*.parquet
       - uses: actions/upload-artifact@v4
         with:

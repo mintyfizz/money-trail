@@ -330,6 +330,22 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([r["key"] for r in result["unknown_year_rows"]], ["U1"])
         self.assertEqual(result["unknown_year_summary"]["rows"], 1)
         self.assertEqual(result["unknown_year_summary"]["cents"], 500)
+        self.assertFalse(result["unknown_year_summary"]["total_is_partial"])
+
+    def test_known_year_without_amount_is_not_unknown_year(self):
+        delta_zip = self.root / "edge.zip"
+        write_zip(delta_zip, {"d.csv": [
+            {**row("U1", "5.00", fy="", date=""), "correction_delete_ind": ""},
+            {**row("M1", "", fy="2026", date="2026-01-01"), "correction_delete_ind": ""},
+            {**row("U2", "", fy="", date=""), "correction_delete_ind": ""},
+            {**row("N1", "1.00"), "correction_delete_ind": ""}]}, delta=True)
+        silver.extract(delta_zip, self.root / "edge")
+        result = changes.delta_summary(self.root / "edge", [2025])
+        self.assertEqual([r["key"] for r in result["unknown_year_rows"]], ["U1", "U2"])
+        self.assertEqual(result["unknown_year_summary"]["cents"], 500)
+        self.assertEqual(result["unknown_year_summary"]["rows_without_amount"], 1)
+        self.assertTrue(result["unknown_year_summary"]["total_is_partial"])
+        self.assertEqual(result["rows_without_amount_in_other_years"], 1)
         self.assertEqual(result["years"]["2025"]["CA"]["added_or_updated_rows"], 1)
 
     def test_stale_audit_file_and_full_totals(self):

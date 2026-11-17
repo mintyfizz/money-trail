@@ -212,10 +212,10 @@
     const c = s.changes, meta = yearData().changes;
     if (!c || !meta) return "";
     const unknown = meta.unknown_year && meta.unknown_year.rows
-      ? ` A further ${d3.format(",")(meta.unknown_year.rows)} changed rows nationally (${money(meta.unknown_year.cents)}) have no date or fiscal year, so they may belong to this year too; they are listed in the source notes.`
+      ? ` A further ${d3.format(",")(meta.unknown_year.rows)} changed rows nationally (${meta.unknown_year.total_is_partial ? "at least " : ""}${money(meta.unknown_year.cents)}) have no usable date or fiscal year, so they may belong to this year too; they are listed in the source notes.`
       : "";
     return `<h3>Changed in Treasury's latest monthly release</h3>
-      <p class="note">The ${esc(meta.snapshot_date || "latest")} release added or updated ${d3.format(",")(c.added_or_updated_rows)} transactions for this state and year${c.flagged_correction_rows ? `, ${d3.format(",")(c.flagged_correction_rows)} of them flagged as corrections` : ""}. ${c.deobligation_rows ? `${d3.format(",")(c.deobligation_rows)} of these take money back (${money(c.deobligation_cents)}).` : ""} The file cannot separate new transactions from updated ones.${unknown}</p>`;
+      <p class="note">The ${esc(meta.snapshot_date || "latest")} release added or updated ${d3.format(",")(c.added_or_updated_rows)} dated transactions allocated to this state and year${c.flagged_correction_rows ? `, ${d3.format(",")(c.flagged_correction_rows)} of them flagged as corrections` : ""}. ${c.deobligation_rows ? `${d3.format(",")(c.deobligation_rows)} of these take money back (${money(c.deobligation_cents)}).` : ""} The file cannot separate new transactions from updated ones.${unknown}</p>`;
   }
 
   function renderPanel() {
@@ -332,7 +332,7 @@
       : "";
     const ch = d.changes;
     const unknownRows = ch && ch.unknown_year_rows && ch.unknown_year_rows.length
-      ? ` The ${esc(ch.source_file || "delta file")} has ${ch.unknown_year_rows.length} changed rows with no date or fiscal year: ${ch.unknown_year_rows.map((r) => `${r.key} (${r.amount_raw || "no amount"}; ${r.source_file} row ${r.source_row})`).join("; ")}.`
+      ? ` The ${esc(ch.source_file || "delta file")} has ${ch.unknown_year_rows.length} changed rows with no date or fiscal year: ${ch.unknown_year_rows.map((r) => `${r.key} (${r.amount_raw || "no amount"}; ${r.reason}; ${r.source_file} row ${r.source_row})`).join("; ")}.`
       : "";
     $("source").textContent = `Source: Treasury's national contracts archive for fiscal year ${d.fiscal_year} (${d.source_zip}, snapshot ${d.snapshot_date}).${cleaned}${unknownRows} Summaries generated ${d.generated_at.slice(0, 10)}.`;
   }

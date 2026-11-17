@@ -45,7 +45,8 @@ def call(method: str, url: str, token: str, body=None, data=None, headers=None):
         return json.loads(raw) if raw else None
 
 
-def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path], token: str) -> dict:
+def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path], token: str,
+             target: str = "main") -> dict:
     for path in files:
         if not path.is_file():
             raise FileNotFoundError(path)
@@ -63,7 +64,7 @@ def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path
     if len(expected) != len(files):
         raise RuntimeError("Two files map to the same release asset name")
     release = call("POST", f"{API}/repos/{repository}/releases", token,
-                   body={"tag_name": tag, "target_commitish": "main", "name": title, "body": notes,
+                   body={"tag_name": tag, "target_commitish": target, "name": title, "body": notes,
                          "draft": True, "prerelease": True})
     upload_base = release["upload_url"].split("{")[0]
     for path in files:
@@ -87,7 +88,9 @@ def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path
     if problems:
         raise RuntimeError("Release left as a draft; verification failed: " + "; ".join(problems))
     published = call("PATCH", f"{API}/repos/{repository}/releases/{release['id']}", token, body={"draft": False})
-    return {"tag": tag, "url": published["html_url"], "assets": expected}
+    tag_ref = call("GET", f"{API}/repos/{repository}/git/ref/tags/{urllib.parse.quote(tag)}", token)
+    return {"tag": tag, "url": published["html_url"], "target": target,
+            "tag_object": tag_ref["object"]["sha"], "assets": expected}
 
 
 def main() -> None:
@@ -97,10 +100,13 @@ def main() -> None:
     parser.add_argument("--title", required=True)
     parser.add_argument("--notes", required=True)
     parser.add_argument("--manifest", required=True, help="where to write the verified asset list")
+    parser.add_argument("--target", required=True, help="the exact commit the release's tag must point at")
     parser.add_argument("files", nargs="+")
     args = parser.parse_args()
     result = preserve(args.repository, args.tag, args.title, args.notes, [Path(f) for f in args.files],
-                      os.environ["GH_TOKEN"])
+                      os.environ["GH_TOKEN"], target=args.target)
+    if result["tag_object"] != args.target:
+        raise SystemExit(f"Tag {args.tag} points at {result['tag_object']}, not {args.target}")
     Path(args.manifest).write_text(json.dumps(result, indent=1))
     print(json.dumps({"tag": result["tag"], "url": result["url"], "files": len(result["assets"])}))
 

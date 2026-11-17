@@ -42,9 +42,14 @@ removal to rows with a live twin gave the same result.
 A first per-agency comparison used a broader official scope (domestic, which includes territories)
 than ours (50 states and DC), so it is indicative only: civilian agencies were within roughly 0.1%
 and the difference sat in the Department of Defense (+$10.9B as published, −$35.5B with deleted
-keys removed). The build now repeats that comparison with identical 51-place filters and records
-it in the reconciliation output; conclusions wait for that result. No rule applied to the archive
-is adopted without an official figure from the same date.
+keys removed). Run 44086712830 (ceab87e) repeated it with identical filters (the same 51
+`place_of_performance_locations`, codes A–D, action-date window): the Department of Defense is
++$14,824,050,391.33 (+2.996%) against a total state gap of +$14,809,601,706.12. Energy, Homeland
+Security, GSA, Transportation and Interior match to the cent; every other large civilian agency is
+within 0.3% (Commerce −0.26%, Justice −0.05%). The gap is therefore a Defense-only difference
+between the archive and the live API. The re-keyed records are a likely contributor, not a proven
+explanation, and no rule applied to the archive is adopted without an official figure from the
+same date.
 
 So the build publishes the archive as Treasury published it. Matched rows are reported
 (`deleted_key_matches`) and written to `stale-rows.parquet` for audit, but not removed; the

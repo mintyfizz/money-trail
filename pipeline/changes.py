@@ -49,15 +49,22 @@ def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 
         FROM delta WHERE correction_delete_ind <> 'D' AND action_date_fiscal_year IN ({year_list})""").fetchone()
     if any(invalid):
         raise DeltaQualityError(f"Added or updated delta rows in scope missing amount/date: {invalid}")
-    undated = con.execute("""
+    # One predicate for unknown-year rows, used for both the list and the totals.
+    unknown = "correction_delete_ind <> 'D' AND (action_date IS NULL OR trim(action_date_fiscal_year) = '')"
+    undated = con.execute(f"""
         SELECT contract_transaction_unique_key, federal_action_obligation_raw, action_date_raw,
-               action_date_fiscal_year, source_file, source_row
-        FROM delta WHERE correction_delete_ind <> 'D'
-          AND (action_date IS NULL OR trim(action_date_fiscal_year) = '' OR federal_action_obligation IS NULL)
-        ORDER BY source_file, source_row""").fetchall()
-    unknown_cents = cents(con.execute("""
-        SELECT sum(federal_action_obligation) FROM delta WHERE correction_delete_ind <> 'D'
-          AND (action_date IS NULL OR trim(action_date_fiscal_year) = '')""").fetchone()[0])
+               action_date_fiscal_year, source_file, source_row,
+               CASE WHEN action_date IS NULL AND trim(action_date_fiscal_year) = '' THEN 'no action date or fiscal year'
+                    WHEN action_date IS NULL THEN 'no valid action date'
+                    ELSE 'no fiscal year' END AS reason
+        FROM delta WHERE {unknown} ORDER BY source_file, source_row""").fetchall()
+    unknown_sum, unknown_missing_amounts = con.execute(f"""
+        SELECT sum(federal_action_obligation), count(*) FILTER (WHERE federal_action_obligation IS NULL)
+        FROM delta WHERE {unknown}""").fetchone()
+    # Rows with a known year but no amount, outside the requested years: counted separately.
+    missing_amount_other_years = con.execute(f"""
+        SELECT count(*) FROM delta WHERE correction_delete_ind <> 'D' AND federal_action_obligation IS NULL
+          AND NOT ({unknown}) AND action_date_fiscal_year NOT IN ({year_list})""").fetchone()[0]
     rows = con.execute(f"""
         SELECT action_date_fiscal_year AS fy,
                CASE WHEN upper(trim(primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
@@ -77,16 +84,22 @@ def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 
         FROM delta""").fetchone()
     out: dict = {
         "method": "monthly delta file",
-        "meaning": ("Rows Treasury changed in its latest monthly release. 'Added or updated' cannot be split "
-                    "into new and changed rows without the previous month's full snapshot."),
+        "meaning": ("Dated rows Treasury changed in its latest monthly release, allocated to the year of their "
+                    "action date. 'Added or updated' cannot be split into new and changed rows without the "
+                    "previous month's full snapshot. Rows with no usable date are reported separately."),
         "all_years": {"added_or_updated_rows": totals[0], "flagged_correction_rows": totals[1],
                       "deleted_rows": totals[2]},
         "unknown_year_rows": [
-            {"key": k, "amount_raw": a, "action_date_raw": d, "fiscal_year_raw": fy, "source_file": f, "source_row": r}
-            for k, a, d, fy, f, r in undated],
-        "unknown_year_summary": {"rows": len(undated), "cents": unknown_cents,
-                                 "meaning": "Added or updated rows with no action date or fiscal year; "
-                                            "they may belong to any year, including those shown."},
+            {"key": k, "amount_raw": a, "action_date_raw": d, "fiscal_year_raw": fy, "source_file": f,
+             "source_row": r, "reason": why}
+            for k, a, d, fy, f, r, why in undated],
+        "unknown_year_summary": {
+            "rows": len(undated), "cents": cents(unknown_sum),
+            "rows_without_amount": unknown_missing_amounts,
+            "total_is_partial": bool(unknown_missing_amounts),
+            "meaning": "Added or updated rows with no usable action date or fiscal year; they may belong to "
+                       "any year, including those shown."},
+        "rows_without_amount_in_other_years": missing_amount_other_years,
         "years": {},
     }
     for fy, place, n, flagged, amount, deob_rows, deob in rows:

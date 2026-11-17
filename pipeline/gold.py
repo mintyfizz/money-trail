@@ -215,7 +215,7 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
                                 "meaning": ("Rows whose keys the same release's delta file lists as deleted. "
                                             "Reported for diagnosis; not removed unless applied.")},
         "full_snapshot": {"rows": full[0], "net_obligations_cents": cents(full[1]),
-                          "note": "The source file as published, before stale keys are removed"},
+                          "note": "The source file as published. Totals above equal this unless deleted keys were applied."},
         "states": dict(sorted(states.items())),
     }
 
