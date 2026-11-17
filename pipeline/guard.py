@@ -61,6 +61,14 @@ class GuardedFile(io.BufferedIOBase):
                 super().close()
 
 
+def write_arrow_parquet(table, path: str | Path, reserve_gib: float = 8) -> int:
+    """Write an Arrow table to Parquet with every byte, footer included, checked against the reserve."""
+    import pyarrow.parquet as parquet
+    with GuardedFile(path, reserve_gib) as sink:
+        parquet.write_table(table, sink, compression="zstd")
+    return Path(path).stat().st_size
+
+
 MIN_SPILL = 256 * 1024 ** 2
 MAX_SPILL = 2 * GIB
 

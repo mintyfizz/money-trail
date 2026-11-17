@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 from pipeline.gold import STATES, cents, sql_list
-from pipeline.guard import duckdb_connect
+from pipeline.guard import duckdb_connect, write_arrow_parquet
 
 
 def _view(con, name: str, directory: str | Path) -> None:
@@ -40,8 +40,9 @@ def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 
     _view(con, "delta", delta_dir)
     year_list = sql_list(str(y) for y in years)
     # Only deletion tombstones may omit amount, date and fiscal year. Rows in the requested years
-    # must be complete. Added or updated rows with no date at all cannot belong to any year; they
-    # are listed by key, never dropped silently or counted in a year.
+    # must be complete. Added or updated rows with no date or fiscal year have an unknown year:
+    # they might belong to a requested year, so they are listed with their amounts and provenance
+    # and reported next to every year's figures, never dropped silently.
     invalid = con.execute(f"""
         SELECT count(*) FILTER (WHERE federal_action_obligation IS NULL),
                count(*) FILTER (WHERE action_date IS NULL)
@@ -54,6 +55,9 @@ def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 
         FROM delta WHERE correction_delete_ind <> 'D'
           AND (action_date IS NULL OR trim(action_date_fiscal_year) = '' OR federal_action_obligation IS NULL)
         ORDER BY source_file, source_row""").fetchall()
+    unknown_cents = cents(con.execute("""
+        SELECT sum(federal_action_obligation) FROM delta WHERE correction_delete_ind <> 'D'
+          AND (action_date IS NULL OR trim(action_date_fiscal_year) = '')""").fetchone()[0])
     rows = con.execute(f"""
         SELECT action_date_fiscal_year AS fy,
                CASE WHEN upper(trim(primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
@@ -77,9 +81,12 @@ def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 
                     "into new and changed rows without the previous month's full snapshot."),
         "all_years": {"added_or_updated_rows": totals[0], "flagged_correction_rows": totals[1],
                       "deleted_rows": totals[2]},
-        "incomplete_rows_outside_any_year": [
+        "unknown_year_rows": [
             {"key": k, "amount_raw": a, "action_date_raw": d, "fiscal_year_raw": fy, "source_file": f, "source_row": r}
             for k, a, d, fy, f, r in undated],
+        "unknown_year_summary": {"rows": len(undated), "cents": unknown_cents,
+                                 "meaning": "Added or updated rows with no action date or fiscal year; "
+                                            "they may belong to any year, including those shown."},
         "years": {},
     }
     for fy, place, n, flagged, amount, deob_rows, deob in rows:
@@ -146,14 +153,14 @@ def diff_snapshots(old_dir: str | Path, new_dir: str | Path, reserve_gib: float 
             "totals": summary, "places": places}
 
 
-def deleted_keys(delta_dir: str | Path, output: str | Path) -> int:
-    """Write the transaction keys a delta file marks as deleted (its tombstone rows)."""
-    con = duckdb_connect(Path(delta_dir).parent / "_duckdb_tmp")
+def deleted_keys(delta_dir: str | Path, output: str | Path, reserve_gib: float = 8) -> int:
+    """Write the transaction keys a delta file marks as deleted (its tombstone rows), guarded."""
+    con = duckdb_connect(Path(delta_dir).parent / "_duckdb_tmp", reserve_gib)
     _view(con, "delta", delta_dir)
-    con.execute(f"""COPY (SELECT DISTINCT contract_transaction_unique_key FROM delta
-                         WHERE correction_delete_ind = 'D' ORDER BY 1)
-                   TO '{output}' (FORMAT parquet, COMPRESSION zstd)""")
-    return con.execute(f"SELECT count(*) FROM read_parquet('{output}')").fetchone()[0]
+    table = con.execute("""SELECT DISTINCT contract_transaction_unique_key FROM delta
+                           WHERE correction_delete_ind = 'D' ORDER BY 1""").to_arrow_table()
+    write_arrow_parquet(table, output, reserve_gib)
+    return table.num_rows
 
 
 def main() -> None:

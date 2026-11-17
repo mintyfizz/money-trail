@@ -327,7 +327,9 @@ class BuildTests(unittest.TestCase):
                                         {**row("N1", "1.00"), "correction_delete_ind": ""}]}, delta=True)
         silver.extract(delta_zip, self.root / "undated")
         result = changes.delta_summary(self.root / "undated", [2025])
-        self.assertEqual([r["key"] for r in result["incomplete_rows_outside_any_year"]], ["U1"])
+        self.assertEqual([r["key"] for r in result["unknown_year_rows"]], ["U1"])
+        self.assertEqual(result["unknown_year_summary"]["rows"], 1)
+        self.assertEqual(result["unknown_year_summary"]["cents"], 500)
         self.assertEqual(result["years"]["2025"]["CA"]["added_or_updated_rows"], 1)
 
     def test_stale_audit_file_and_full_totals(self):
@@ -342,6 +344,20 @@ class BuildTests(unittest.TestCase):
         rows = pq.read_table(audit).to_pylist()
         self.assertEqual([r["contract_transaction_unique_key"] for r in rows], ["OLD_2"])
         self.assertEqual(rows[0]["source_row"], 2)
+
+    def test_duckdb_exports_are_guarded(self):
+        from pipeline import guard
+        delta_zip = self.root / "gd.zip"
+        write_zip(delta_zip, {"d.csv": [{**row("D9", ""), "correction_delete_ind": "D"}]}, delta=True)
+        silver.extract(delta_zip, self.root / "gd")
+        real = guard.free_bytes
+        def tight(path):
+            # Plenty of room for DuckDB spill checks, none for the Parquet export itself.
+            return 8 * guard.GIB + guard.MIN_SPILL + 10 if str(path).endswith("_duckdb_tmp") else 8 * guard.GIB + 10
+        with mock.patch("pipeline.guard.free_bytes", side_effect=tight):
+            with self.assertRaises(RuntimeError):
+                changes.deleted_keys(self.root / "gd", self.root / "keys.parquet")
+        self.assertTrue(real(self.root) > 0)
 
     def test_release_asset_names_match_github(self):
         from pipeline import release

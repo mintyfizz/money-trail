@@ -32,6 +32,8 @@ def build(inputs: str | Path, output: str | Path) -> dict:
             "agencies": [a for a in rec.get("agencies", []) if a["official_cents"] or a["ours_cents"]][:12]}
         summary["changes"] = None if delta is None else {
             "method": delta["method"], "meaning": delta.get("meaning"), "all_years": delta.get("all_years"),
+            "unknown_year": delta.get("unknown_year_summary"),
+            "unknown_year_rows": delta.get("unknown_year_rows", []),
             "source_file": delta.get("source_file"),
             "snapshot_date": delta.get("snapshot_date"), "outside_states": year_changes.get("OTHER")}
         (output / f"fy{year}.json").write_text(json.dumps(summary, separators=(",", ":")))

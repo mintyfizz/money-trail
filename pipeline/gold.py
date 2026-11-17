@@ -13,7 +13,7 @@ from pathlib import Path
 
 import duckdb
 
-from pipeline.guard import duckdb_connect
+from pipeline.guard import duckdb_connect, write_arrow_parquet
 from decimal import Decimal
 
 STATES = {
@@ -126,11 +126,11 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
     deleted_listed = con.execute("SELECT count(*) FROM deleted").fetchone()[0]
     if stale_out:
         # Audit trail: every row removed, with where it came from, so the exclusion can be checked.
-        con.execute(f"""COPY (SELECT contract_transaction_unique_key, contract_award_unique_key, federal_action_obligation,
-                                     federal_action_obligation_raw, action_date_raw, last_modified_date,
-                                     primary_place_of_performance_state_code, source_file, source_row
-                              FROM stale ORDER BY source_file, source_row)
-                       TO '{stale_out}' (FORMAT parquet, COMPRESSION zstd)""")
+        audit = con.execute("""SELECT contract_transaction_unique_key, contract_award_unique_key, federal_action_obligation,
+                                      federal_action_obligation_raw, action_date_raw, last_modified_date,
+                                      primary_place_of_performance_state_code, source_file, source_row
+                               FROM stale ORDER BY source_file, source_row""").to_arrow_table()
+        write_arrow_parquet(audit, stale_out, reserve_gib)
     national = con.execute("""
         SELECT sum(amount), count(*), count(DISTINCT contract_award_unique_key) FROM tx""").fetchone()
 
