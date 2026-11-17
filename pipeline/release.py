@@ -45,8 +45,39 @@ def call(method: str, url: str, token: str, body=None, data=None, headers=None):
         return json.loads(raw) if raw else None
 
 
+def tag_commit(repository: str, tag: str, token: str) -> str | None:
+    """The commit a tag points at, peeling annotated tags; None if the tag does not exist."""
+    try:
+        ref = call("GET", f"{API}/repos/{repository}/git/ref/tags/{urllib.parse.quote(tag)}", token)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    obj = ref["object"]
+    for _ in range(5):  # annotated tags can point at further tag objects
+        if obj["type"] == "commit":
+            return obj["sha"]
+        if obj["type"] != "tag":
+            raise RuntimeError(f"Tag {tag} points at a {obj['type']}, not a commit")
+        obj = call("GET", f"{API}/repos/{repository}/git/tags/{obj['sha']}", token)["object"]
+    raise RuntimeError(f"Tag {tag} has too many levels of indirection")
+
+
+def ensure_tag(repository: str, tag: str, target: str, token: str) -> None:
+    """Make sure `tag` points at `target` before anything is published; create it if missing."""
+    if not re.fullmatch(r"[0-9a-f]{40}", target):
+        raise RuntimeError("Target must be a full 40-character commit SHA")
+    current = tag_commit(repository, tag, token)
+    if current is None:
+        call("POST", f"{API}/repos/{repository}/git/refs", token,
+             body={"ref": f"refs/tags/{tag}", "sha": target})
+        current = tag_commit(repository, tag, token)
+    if current != target:
+        raise RuntimeError(f"Tag {tag} points at {current}, not {target}; nothing published")
+
+
 def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path], token: str,
-             target: str = "main") -> dict:
+             target: str) -> dict:
     for path in files:
         if not path.is_file():
             raise FileNotFoundError(path)
@@ -59,6 +90,7 @@ def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path
     except urllib.error.HTTPError as error:
         if error.code != 404:
             raise
+    ensure_tag(repository, tag, target, token)
     expected = {asset_name(p.name): {"source_name": p.name, "size": p.stat().st_size, "sha256": sha256(p)}
                 for p in files}
     if len(expected) != len(files):
@@ -87,10 +119,12 @@ def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path
         problems.append(f"unexpected assets: {sorted(extra)}")
     if problems:
         raise RuntimeError("Release left as a draft; verification failed: " + "; ".join(problems))
+    # Check the tag again immediately before publishing; a moved tag leaves the release a draft.
+    if tag_commit(repository, tag, token) != target:
+        raise RuntimeError(f"Release left as a draft; tag {tag} no longer points at {target}")
     published = call("PATCH", f"{API}/repos/{repository}/releases/{release['id']}", token, body={"draft": False})
-    tag_ref = call("GET", f"{API}/repos/{repository}/git/ref/tags/{urllib.parse.quote(tag)}", token)
     return {"tag": tag, "url": published["html_url"], "target": target,
-            "tag_object": tag_ref["object"]["sha"], "assets": expected}
+            "tag_object": tag_commit(repository, tag, token), "assets": expected}
 
 
 def main() -> None:
@@ -105,8 +139,6 @@ def main() -> None:
     args = parser.parse_args()
     result = preserve(args.repository, args.tag, args.title, args.notes, [Path(f) for f in args.files],
                       os.environ["GH_TOKEN"], target=args.target)
-    if result["tag_object"] != args.target:
-        raise SystemExit(f"Tag {args.tag} points at {result['tag_object']}, not {args.target}")
     Path(args.manifest).write_text(json.dumps(result, indent=1))
     print(json.dumps({"tag": result["tag"], "url": result["url"], "files": len(result["assets"])}))
 

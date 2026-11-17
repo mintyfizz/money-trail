@@ -381,6 +381,86 @@ class BuildTests(unittest.TestCase):
                          "FY.All._All_Contracts_Delta_20261106.zip")
         self.assertEqual(release.asset_name("part-0001.parquet"), "part-0001.parquet")
 
+    def _fake_github(self, tag_sha, annotated=False, move_before_publish=False):
+        calls = []
+        state = {"sha": tag_sha, "created": False}
+        def call(method, url, token, body=None, data=None, headers=None):
+            calls.append((method, url.split("?")[0]))
+            if method == "GET" and "/git/ref/tags/" in url:
+                if state["sha"] is None:
+                    import urllib.error
+                    raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+                sha = state["sha"]
+                if move_before_publish and any(c[0] == "POST" and "uploads" in c[1] for c in calls):
+                    sha = "f" * 40
+                return {"object": {"type": "tag" if annotated else "commit", "sha": "a" * 40 if annotated else sha}}
+            if method == "GET" and "/git/tags/" in url:
+                return {"object": {"type": "commit", "sha": state["sha"]}}
+            if method == "POST" and url.endswith("/git/refs"):
+                state["sha"] = body["sha"]
+                return {}
+            if method == "GET" and "/releases/tags/" in url:
+                import urllib.error
+                raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+            if method == "POST" and url.endswith("/releases"):
+                return {"id": 7, "upload_url": "https://uploads.example/releases/7/assets{?name}"}
+            if method == "POST" and "uploads" in url:
+                return {}
+            if method == "GET" and url.split("?")[0].endswith("/assets"):
+                return [{"name": n, "size": v["size"], "digest": "sha256:" + v["sha256"]} for n, v in self.expected.items()]
+            if method == "PATCH":
+                return {"html_url": "https://example/release"}
+            raise AssertionError((method, url))
+        return call, calls
+
+    def _release_files(self):
+        from pipeline import release
+        f = self.root / "asset.bin"
+        f.write_bytes(b"hello")
+        self.expected = {release.asset_name(f.name): {"size": 5, "sha256": release.sha256(f)}}
+        return [f]
+
+    def test_release_refuses_a_tag_at_another_commit(self):
+        from pipeline import release
+        files = self._release_files()
+        target = "1" * 40
+        call, calls = self._fake_github("2" * 40)
+        with mock.patch.object(release, "call", call):
+            with self.assertRaisesRegex(RuntimeError, "nothing published"):
+                release.preserve("o/r", "t", "T", "N", files, "tok", target=target)
+        self.assertFalse(any(m == "PATCH" for m, _ in calls))
+        self.assertFalse(any(u.endswith("/releases") for m, u in calls if m == "POST"))
+
+    def test_release_peels_annotated_tag_and_publishes(self):
+        from pipeline import release
+        files = self._release_files()
+        target = "1" * 40
+        call, calls = self._fake_github(target, annotated=True)
+        with mock.patch.object(release, "call", call):
+            result = release.preserve("o/r", "t", "T", "N", files, "tok", target=target)
+        self.assertEqual(result["tag_object"], target)
+        self.assertTrue(any(m == "PATCH" for m, _ in calls))
+
+    def test_release_creates_missing_tag_at_target(self):
+        from pipeline import release
+        files = self._release_files()
+        target = "1" * 40
+        call, calls = self._fake_github(None)
+        with mock.patch.object(release, "call", call):
+            result = release.preserve("o/r", "t", "T", "N", files, "tok", target=target)
+        self.assertEqual(result["tag_object"], target)
+        self.assertIn(("POST", "https://api.github.com/repos/o/r/git/refs"), calls)
+
+    def test_release_stays_draft_if_tag_moves_before_publish(self):
+        from pipeline import release
+        files = self._release_files()
+        target = "1" * 40
+        call, calls = self._fake_github(target, move_before_publish=True)
+        with mock.patch.object(release, "call", call):
+            with self.assertRaisesRegex(RuntimeError, "left as a draft"):
+                release.preserve("o/r", "t", "T", "N", files, "tok", target=target)
+        self.assertFalse(any(m == "PATCH" for m, _ in calls))
+
     def test_fetch_picks_latest_file(self):
         from pipeline import fetch
         files = [{"file_name": "FY2025_All_Contracts_Full_20261006.zip", "url": "u1"},

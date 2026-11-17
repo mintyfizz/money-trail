@@ -45,9 +45,11 @@ and the difference sat in the Department of Defense (+$10.9B as published, −$3
 keys removed). Run 44086712830 (ceab87e) repeated it with identical filters (the same 51
 `place_of_performance_locations`, codes A–D, action-date window): the Department of Defense is
 +$14,824,050,391.33 (+2.996%) against a total state gap of +$14,809,601,706.12. Energy, Homeland
-Security, GSA, Transportation and Interior match to the cent; every other large civilian agency is
-within 0.3% (Commerce −0.26%, Justice −0.05%). The gap is therefore a Defense-only difference
-between the archive and the live API. The re-keyed records are a likely contributor, not a proven
+Security, GSA, Transportation and Interior match to the cent; most other civilian agencies are
+within 0.3% (Commerce −0.26%, Justice −0.05%), but not all: the US Agency for Global Media is
++$1,337,500.05 (+2.94%). The gap is therefore overwhelmingly a Defense difference between the
+archive and the live API, with small civilian gaps. The largest state gap is Arkansas (+9.60%);
+Alabama is +9.31%. The re-keyed records are a likely contributor, not a proven
 explanation, and no rule applied to the archive is adopted without an official figure from the
 same date.
 

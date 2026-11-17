@@ -212,7 +212,7 @@
     const c = s.changes, meta = yearData().changes;
     if (!c || !meta) return "";
     const unknown = meta.unknown_year && meta.unknown_year.rows
-      ? ` A further ${d3.format(",")(meta.unknown_year.rows)} changed rows nationally (${meta.unknown_year.total_is_partial ? "at least " : ""}${money(meta.unknown_year.cents)}) have no usable date or fiscal year, so they may belong to this year too; they are listed in the source notes.`
+      ? ` A further ${d3.format(",")(meta.unknown_year.rows)} changed rows nationally have no usable date or fiscal year, so they may belong to this year too; ${meta.unknown_year.rows_without_amount ? `their known amounts total ${money(meta.unknown_year.cents)} and ${d3.format(",")(meta.unknown_year.rows_without_amount)} have unknown amounts` : `their amounts total ${money(meta.unknown_year.cents)}`}. They are listed in the source notes.`
       : "";
     return `<h3>Changed in Treasury's latest monthly release</h3>
       <p class="note">The ${esc(meta.snapshot_date || "latest")} release added or updated ${d3.format(",")(c.added_or_updated_rows)} dated transactions allocated to this state and year${c.flagged_correction_rows ? `, ${d3.format(",")(c.flagged_correction_rows)} of them flagged as corrections` : ""}. ${c.deobligation_rows ? `${d3.format(",")(c.deobligation_rows)} of these take money back (${money(c.deobligation_cents)}).` : ""} The file cannot separate new transactions from updated ones.${unknown}</p>`;
@@ -323,7 +323,7 @@
     if (agencies.length) {
       const big = agencies.filter((a) => Math.abs(a.gap_cents) >= 100000000 * 100);
       const rest = agencies.filter((a) => Math.abs(a.gap_cents) < 100000000 * 100);
-      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Compared agency by agency over the same 51 places, ${rest.length} of the ${agencies.length} largest agencies are within $100 million of USAspending's figure. ${big.length ? `The gap sits in ${big.map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : ""}</p>`);
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Compared agency by agency over the same 51 places, ${rest.length} of the ${agencies.length} largest agencies are within $100 million of USAspending's figure. ${big.length ? `The gap is overwhelmingly in ${big.map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}; smaller agencies show smaller gaps.` : ""}</p>`);
     }
     const d = yearData();
     const matches = d.deleted_key_matches;
