@@ -156,3 +156,150 @@ class AssistanceExtractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def assistance_silver(root, rows, name="s", **kw):
+    z = Path(root) / f"{name}.zip"
+    write_assistance_zip(z, rows, **kw)
+    silver.extract(z, Path(root) / name, kind="assistance")
+    return Path(root) / name
+
+
+class AssistanceGoldTests(unittest.TestCase):
+    def setUp(self):
+        from pipeline import gold
+        self.gold = gold
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def summary(self, rows, **kw):
+        self.calls = getattr(self, "calls", 0) + 1
+        silver_dir = assistance_silver(self.root, rows, name=f"s{self.calls}", **kw)
+        return self.gold.summarise(silver_dir, 2025, "2026-11-06", "a.zip", kind="assistance")
+
+    def test_pragmatic_measure_place_and_categories(self):
+        r = self.summary(ASSISTANCE_ROWS)
+        self.assertEqual(r["kind"], "assistance")
+        # Loans count their subsidy cost; every other row its obligation. Face value is never added.
+        self.assertEqual(r["national"]["amount_cents"], 261931)
+        self.assertEqual(r["national"]["net_obligations_cents"], 138475)
+        cats = {c["category"]: c for c in r["national"]["categories"]}
+        self.assertEqual(cats["grants"]["amount_cents"], 96975)
+        self.assertEqual(cats["loans"]["amount_cents"], 123456)
+        self.assertEqual(cats["loans"]["face_value_cents"], 25000000)
+        self.assertNotIn("face_value_cents", cats["grants"])
+        self.assertEqual(cats["direct_payments"]["amount_cents"], 37500)
+        self.assertEqual(cats["not_specified"]["amount_cents"], 4000)  # source -1 kept as its own bucket
+        self.assertEqual(r["states"]["CA"]["amount_cents"], 234956)
+        self.assertEqual(r["states"]["TX"]["amount_cents"], -5025)
+        self.assertEqual(r["outside_map"]["territory_cents"], 30000)
+        self.assertEqual(r["outside_map"]["territories"][0]["code"], "PR")
+        # Marshall Islands: freely associated, counted as foreign, listed by name.
+        self.assertEqual(r["outside_map"]["foreign_cents"], 2000)
+        self.assertEqual(r["outside_map"]["freely_associated_states"][0]["code"], "MH")
+        self.assertEqual(r["checks"]["pragmatic_mismatch_rows"], 0)
+        self.assertEqual(r["checks"]["pragmatic_null_rows"], 0)
+        self.assertEqual(r["checks"]["rows_without_amount"], 0)
+
+    def test_aggregate_and_unidentified_recipients_are_not_ranked(self):
+        ca = self.summary(ASSISTANCE_ROWS)["states"]["CA"]
+        self.assertEqual([x["uei"] for x in ca["recipients"]], ["UEIA"])
+        self.assertEqual(ca["recipients"][0]["amount_cents"], 227456)
+        self.assertEqual(ca["recipients_not_ranked"]["amount_cents"], 7500)
+        self.assertEqual(ca["recipients_not_ranked"]["aggregate_records"], 1)
+        redacted = self.summary([assistance_row("X1", "5.00", uei="UEIZ", record_type="3")])["states"]["CA"]
+        self.assertEqual(redacted["recipients"], [])
+        self.assertEqual(redacted["recipients_not_ranked"]["redacted_records"], 1)
+
+    def test_full_matrix_adds_up_to_every_total(self):
+        r = self.summary(ASSISTANCE_ROWS)
+        cols = r["matrix"]["columns"]
+        rows = [dict(zip(cols, x)) for x in r["matrix"]["rows"]]
+        self.assertEqual(sum(x["amount_cents"] for x in rows), r["national"]["amount_cents"])
+        ca = {(x["agency"], x["category"]): x["amount_cents"] for x in rows if x["place"] == "CA"}
+        self.assertEqual(ca[("Small Business Administration", "loans")], 123456)
+        self.assertEqual(ca[("Department of Education", "not_specified")], 4000)
+        self.assertEqual(sum(ca.values()), r["states"]["CA"]["amount_cents"])
+        loan = next(x for x in rows if x["category"] == "loans")
+        self.assertEqual(loan["face_value_cents"], 25000000)
+        self.assertEqual({x["place"] for x in rows if x["place_kind"] == "foreign"}, {"foreign"})
+
+    def test_unrecognised_type_code_fails(self):
+        with self.assertRaisesRegex(kinds.UnmappedCodeError, "F099"):
+            self.summary([assistance_row("N1", "1.00", "F099")])
+
+    def test_missing_amount_is_disclosed_not_blocking(self):
+        r = self.summary([assistance_row("B1", ""), assistance_row("B2", "10.00")])
+        self.assertEqual(r["checks"]["rows_without_amount"], 1)
+        self.assertEqual(r["national"]["amount_cents"], 1000)
+        self.assertEqual(r["states"]["CA"]["categories"][0]["rows_without_amount"], 1)
+
+    def test_unknown_fips_goes_to_unknown_and_is_listed(self):
+        r = self.summary([assistance_row("F1", "7.00", fips="99"), assistance_row("F2", "3.00", fips="6")])
+        self.assertEqual(r["checks"]["unrecognised_state_fips_rows"], 1)
+        self.assertEqual(r["outside_map"]["unknown_cents"], 700)
+        self.assertEqual(r["unrecognised_state_fips"], [{"fips": "99", "rows": 1, "amount_cents": 700}])
+        self.assertEqual(r["states"]["CA"]["amount_cents"], 300)  # one-digit FIPS is padded
+
+    def test_pragmatic_cross_check_separates_nulls_from_mismatches(self):
+        r = self.summary([assistance_row("P1", "1000.00", pragmatic="999.00"),
+                          assistance_row("P2", "5.00", pragmatic=""),
+                          assistance_row("P3", "0.00", "07", subsidy="12.00", pragmatic="12.00")])
+        self.assertEqual(r["checks"]["pragmatic_mismatch_rows"], 1)
+        self.assertEqual(r["checks"]["pragmatic_mismatch_cents"], -100)
+        self.assertEqual(r["checks"]["pragmatic_null_rows"], 1)
+        absent = self.gold.summarise(assistance_silver(self.root, ASSISTANCE_ROWS, name="np", pragmatic=False),
+                                     2025, "2026-11-06", "a.zip", kind="assistance")
+        self.assertIsNone(absent["checks"]["pragmatic_mismatch_rows"])
+
+    def test_source_correction_code_is_not_the_delta_marker(self):
+        z = self.root / "full.zip"
+        write_assistance_zip(z, [assistance_row("C1", "1.00", correction_delete_indicator_code="C")],
+                             delta_column="correction_delete_indicator_code")
+        report = silver.extract(z, self.root / "full", kind="assistance")
+        self.assertIsNone(report["members"][0]["delta_column"])
+
+    def test_optional_columns_are_tracked_per_member(self):
+        z = self.root / "mixed.zip"
+        with zipfile.ZipFile(z, "w") as archive:
+            for i, pragmatic in enumerate((True, False)):
+                columns = list(kinds.ASSISTANCE.columns) + (["generated_pragmatic_obligations"] if pragmatic else [])
+                buffer = io.StringIO()
+                writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
+                writer.writeheader()
+                writer.writerow(assistance_row(f"K{i}", "2.00", pragmatic="2.00" if pragmatic else None))
+                archive.writestr(f"FY2025_All_Assistance_Full_20261106_{i + 1}.csv", buffer.getvalue())
+        report = silver.extract(z, self.root / "mixed", kind="assistance")
+        self.assertEqual(report["optional_columns_present"], [])
+        self.assertFalse(report["optional_columns_consistent"])
+        self.assertEqual(report["members"][0]["optional_columns"], ["generated_pragmatic_obligations"])
+        r = self.gold.summarise(self.root / "mixed", 2025, "2026-11-06", "m.zip", kind="assistance")
+        self.assertEqual(r["national"]["amount_cents"], 400)
+        self.assertEqual(r["checks"]["pragmatic_null_rows"], 1)  # the member without the column
+
+
+class ContractsPlaceTests(unittest.TestCase):
+    def test_freely_associated_contracts_are_foreign(self):
+        from pipeline import gold
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            columns = list(kinds.CONTRACTS.columns)
+            buffer = io.StringIO()
+            writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
+            writer.writeheader()
+            for key, state, country in (("K1", "FM", "FSM"), ("K2", "PW", "USA"), ("K3", "GU", "USA")):
+                writer.writerow({**{c: "" for c in columns}, "contract_transaction_unique_key": key,
+                                 "contract_award_unique_key": f"A_{key}", "federal_action_obligation": "10.00",
+                                 "action_date": "2025-03-01", "action_date_fiscal_year": "2025",
+                                 "primary_place_of_performance_state_code": state,
+                                 "primary_place_of_performance_country_code": country, "award_type_code": "D"})
+            with zipfile.ZipFile(root / "c.zip", "w") as archive:
+                archive.writestr("FY2025_All_Contracts_Full_20261106_1.csv", buffer.getvalue())
+            silver.extract(root / "c.zip", root / "c")
+            r = gold.summarise(root / "c", 2025, "2026-11-06", "c.zip")
+            self.assertEqual(r["outside_map"]["foreign_cents"], 2000)
+            self.assertEqual(r["outside_map"]["territory_cents"], 1000)
+            self.assertEqual({x["code"] for x in r["outside_map"]["freely_associated_states"]}, {"FM", "PW"})

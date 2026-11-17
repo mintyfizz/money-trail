@@ -142,12 +142,10 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, rese
                 raise ValueError(f"{info.filename} is missing expected {kind.name} columns: {missing}")
             optional = [c for c in kind.optional if c in header and c not in kind.columns]
             wanted = list(kind.columns) + optional + ([delta] if delta else [])
-            if index == 0:
-                report["optional_columns_present"] = optional
             target = out_dir / f"part-{index:04d}.parquet"
             member = {"source_file": info.filename, "output": target.name, "rows": 0, "bad_money": 0,
                       "bad_dates": 0, "blank_keys": 0, "bad_indicators": 0, "obligation_sum": "0",
-                      "delta_column": delta,
+                      "delta_column": delta, "optional_columns": optional,
                       "uncompressed_bytes": info.file_size}
             total = None
             writer = None
@@ -179,6 +177,10 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, rese
             member["obligation_sum"] = str(total) if total is not None else "0"
             member["parquet_bytes"] = target.stat().st_size if target.exists() else 0
             report["members"].append(member)
+    # Optional columns are tracked per member: a column counts as present only if every member has it.
+    by_member = [set(m["optional_columns"]) for m in report["members"]]
+    report["optional_columns_present"] = sorted(set.intersection(*by_member))
+    report["optional_columns_consistent"] = all(b == by_member[0] for b in by_member)
     report["rows"] = sum(m["rows"] for m in report["members"])
     report["bad_money"] = sum(m["bad_money"] for m in report["members"])
     report["bad_dates"] = sum(m["bad_dates"] for m in report["members"])

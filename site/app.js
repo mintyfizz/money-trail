@@ -263,8 +263,8 @@
     const o = yearData().outside_map;
     const terr = (o.territories || []).slice(0, 4).map((t) => `${esc(t.name)} ${money(t.amount_cents)}`).join("; ");
     const items = [
-      ["Territories and freely associated states", o.territory_cents ?? 0, terr || "None recorded"],
-      ["Outside the United States", o.foreign_cents ?? 0, "Work performed abroad, by country code"],
+      ["U.S. territories", o.territory_cents ?? 0, terr || "None recorded"],
+      ["Outside the United States", o.foreign_cents ?? 0, "Work performed abroad, including Micronesia, the Marshall Islands and Palau (freely associated states, counted as foreign as Treasury does)"],
       ["No location recorded", o.unknown_cents ?? 0, "Transactions with no place of performance in the record"],
     ];
     $("outside").innerHTML = items.map(([name, cents, detail]) => `

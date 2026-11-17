@@ -120,8 +120,10 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(ca["transactions"], 3)
         tx = result["states"]["TX"]
         names = {r["name"] for r in tx["recipients"]}
-        self.assertIn("Recipients without an ID (combined)", names)
-        self.assertNotIn("Somebody", names)
+        # Rows without a recipient ID are never ranked as a company; they are reported beside the ranking.
+        self.assertEqual(names, {"Orbit LLC"})
+        self.assertEqual(tx["recipients_not_ranked"]["amount_cents"], 30000)
+        self.assertEqual(tx["recipients_not_ranked"]["without_recipient_id"], 1)
         types = {t["code"]: t["amount_cents"] for t in tx["types"]}
         self.assertEqual(types, {"A": 50000, "B": 30000})
         self.assertEqual(ca["agencies"][0]["share"], 1.0)
