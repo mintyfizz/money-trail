@@ -321,6 +321,15 @@ class BuildTests(unittest.TestCase):
         with self.assertRaises(changes.DeltaQualityError):
             changes.delta_summary(self.root / "bad_delta", [2025])
 
+    def test_undated_delta_rows_are_listed_not_counted(self):
+        delta_zip = self.root / "undated.zip"
+        write_zip(delta_zip, {"d.csv": [{**row("U1", "5.00", fy="", date=""), "correction_delete_ind": ""},
+                                        {**row("N1", "1.00"), "correction_delete_ind": ""}]}, delta=True)
+        silver.extract(delta_zip, self.root / "undated")
+        result = changes.delta_summary(self.root / "undated", [2025])
+        self.assertEqual([r["key"] for r in result["incomplete_rows_outside_any_year"]], ["U1"])
+        self.assertEqual(result["years"]["2025"]["CA"]["added_or_updated_rows"], 1)
+
     def test_stale_audit_file_and_full_totals(self):
         import pyarrow as pa, pyarrow.parquet as pq
         out = self.summary_of([row("OLD_2", "440.00"), row("NEW_14", "440.00")])

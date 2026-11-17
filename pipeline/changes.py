@@ -39,14 +39,21 @@ def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 
     con = duckdb_connect(Path(delta_dir).parent / "_duckdb_tmp", reserve_gib)
     _view(con, "delta", delta_dir)
     year_list = sql_list(str(y) for y in years)
-    # Only deletion tombstones may omit amount, date and fiscal year.
-    invalid = con.execute("""
+    # Only deletion tombstones may omit amount, date and fiscal year. Rows in the requested years
+    # must be complete. Added or updated rows with no date at all cannot belong to any year; they
+    # are listed by key, never dropped silently or counted in a year.
+    invalid = con.execute(f"""
         SELECT count(*) FILTER (WHERE federal_action_obligation IS NULL),
-               count(*) FILTER (WHERE action_date IS NULL),
-               count(*) FILTER (WHERE trim(action_date_fiscal_year) = '')
-        FROM delta WHERE correction_delete_ind <> 'D'""").fetchone()
+               count(*) FILTER (WHERE action_date IS NULL)
+        FROM delta WHERE correction_delete_ind <> 'D' AND action_date_fiscal_year IN ({year_list})""").fetchone()
     if any(invalid):
-        raise DeltaQualityError(f"Added or updated delta rows missing amount/date/fiscal year: {invalid}")
+        raise DeltaQualityError(f"Added or updated delta rows in scope missing amount/date: {invalid}")
+    undated = con.execute("""
+        SELECT contract_transaction_unique_key, federal_action_obligation_raw, action_date_raw,
+               action_date_fiscal_year, source_file, source_row
+        FROM delta WHERE correction_delete_ind <> 'D'
+          AND (action_date IS NULL OR trim(action_date_fiscal_year) = '' OR federal_action_obligation IS NULL)
+        ORDER BY source_file, source_row""").fetchall()
     rows = con.execute(f"""
         SELECT action_date_fiscal_year AS fy,
                CASE WHEN upper(trim(primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
@@ -70,6 +77,9 @@ def delta_summary(delta_dir: str | Path, years: list[int], reserve_gib: float = 
                     "into new and changed rows without the previous month's full snapshot."),
         "all_years": {"added_or_updated_rows": totals[0], "flagged_correction_rows": totals[1],
                       "deleted_rows": totals[2]},
+        "incomplete_rows_outside_any_year": [
+            {"key": k, "amount_raw": a, "action_date_raw": d, "fiscal_year_raw": fy, "source_file": f, "source_row": r}
+            for k, a, d, fy, f, r in undated],
         "years": {},
     }
     for fy, place, n, flagged, amount, deob_rows, deob in rows:
