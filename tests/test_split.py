@@ -157,7 +157,7 @@ class SplitTests(unittest.TestCase):
     def test_rebuild_of_an_unsplit_release_checks_the_preserved_digest(self):
         name = "FY2025_All_Contracts_Full_20261106.zip"
         digest = hashlib.sha256(self.data).hexdigest()
-        store = {"sha256.txt": f"{digest}  {name}\n".encode(), name: self.data}
+        store = {"sha256.txt": f"{digest}  data/zip/{name}\n".encode(), name: self.data}  # as FY2021-24 recorded
 
         def download(asset, directory):
             directory.mkdir(parents=True, exist_ok=True)

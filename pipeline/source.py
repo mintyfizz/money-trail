@@ -98,7 +98,8 @@ def parse_sha256_file(text: str) -> tuple[str, str]:
     if len(lines) != 1:
         raise SnapshotError("Expected exactly one line in the sha256 file")
     digest, name = lines[0].split(maxsplit=1)
-    return digest.lower(), name.lstrip("*")
+    # Older releases recorded the runner path (data/zip/<name>); only the file name identifies it.
+    return digest.lower(), Path(name.strip().lstrip("*")).name
 
 
 def gh_download(repository: str, tag: str, asset: str, directory: Path) -> Path:
