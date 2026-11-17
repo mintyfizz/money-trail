@@ -1,9 +1,10 @@
-"""Stream a USAspending contracts ZIP into a typed transaction table, one Parquet file per CSV member.
+"""Stream a USAspending award archive into a typed transaction table, one Parquet file per CSV member.
 
-The national archives are too large to keep as a full text copy on a runner, so this step keeps
-only the columns the analysis needs. The original ZIP stays in a release as the raw layer.
-Every row keeps its source file and row number, and the original obligation string, so a typed
-value can always be traced back.
+Works for both kinds of archive (contracts and financial assistance); each kind declares its own
+column contract in `pipeline.kinds`. The national archives are too large to keep as a full text
+copy on a runner, so this step keeps only the columns the analysis needs. The original ZIP stays in
+a release as the raw layer. Every row keeps its source file and row number, and the original
+string of every money and date column, so a typed value can always be traced back.
 """
 from __future__ import annotations
 
@@ -21,20 +22,9 @@ import pyarrow.csv as arrow_csv
 import pyarrow.parquet as parquet
 
 from pipeline.guard import GuardedFile
+from pipeline.kinds import CONTRACTS, KINDS, Kind
 
-COLUMNS = (
-    "contract_transaction_unique_key", "contract_award_unique_key", "award_id_piid", "modification_number",
-    "federal_action_obligation", "action_date", "action_date_fiscal_year",
-    "awarding_agency_code", "awarding_agency_name", "awarding_sub_agency_name",
-    "funding_agency_code", "funding_agency_name",
-    "recipient_uei", "recipient_name", "recipient_parent_uei", "recipient_parent_name",
-    "primary_place_of_performance_country_code", "primary_place_of_performance_state_code",
-    "primary_place_of_performance_state_name", "prime_award_transaction_place_of_performance_county_fips_code",
-    "primary_place_of_performance_county_name",
-    "award_type_code", "award_type", "idv_type_code", "idv_type", "action_type_code",
-    "naics_code", "naics_description", "product_or_service_code_description",
-    "prime_award_base_transaction_description", "last_modified_date",
-)
+COLUMNS = CONTRACTS.columns  # kept for callers that predate assistance support
 DELTA_COLUMN = "correction_delete_ind"
 # Treasury's newer delta generator names the column differently; both are accepted, nothing else.
 DELTA_ALIASES = ("correction_delete_ind", "correction_delete_indicator")
@@ -86,45 +76,56 @@ def to_date(values: pa.Array) -> tuple[pa.Array, int]:
     return dates, bad
 
 
-def type_batch(batch: pa.RecordBatch, source_file: str, first_row: int, delta: str | None) -> tuple[pa.Table, dict]:
+def type_batch(batch: pa.RecordBatch, source_file: str, first_row: int, delta: str | None,
+               kind: Kind = CONTRACTS) -> tuple[pa.Table, dict]:
     table = pa.Table.from_batches([batch])
     bad_indicators = 0
     if delta:
         indicator = pc.utf8_upper(pc.utf8_trim_whitespace(table[delta].combine_chunks()))
         bad_indicators = pc.sum(pc.invert(pc.is_in(indicator, pa.array(sorted(DELTA_VALUES))))).as_py() or 0
         table = table.drop_columns([delta]).append_column(DELTA_COLUMN, indicator)
-    money, bad_money = to_money(table["federal_action_obligation"].combine_chunks())
-    action_date, bad_dates = to_date(table["action_date"].combine_chunks())
     columns = {name: table[name] for name in table.column_names}
-    columns["federal_action_obligation_raw"] = columns.pop("federal_action_obligation")
-    columns["federal_action_obligation"] = money
-    columns["action_date_raw"] = columns["action_date"]
-    columns["action_date"] = action_date
+    money_cols = [c for c in kind.money if c in columns]
+    date_cols = [c for c in kind.dates if c in columns]
+    bad_money = bad_dates = 0
+    for name in money_cols:
+        typed_money, bad = to_money(columns[name].combine_chunks())
+        columns[f"{name}_raw"] = columns[name]
+        columns[name] = typed_money
+        bad_money += bad
+    for name in date_cols:
+        typed_date, bad = to_date(columns[name].combine_chunks())
+        columns[f"{name}_raw"] = columns[name]
+        columns[name] = typed_date
+        bad_dates += bad
     columns["source_file"] = pa.array([source_file] * table.num_rows, pa.string())
     columns["source_row"] = pa.array(range(first_row, first_row + table.num_rows), pa.int64())
-    order = ["contract_transaction_unique_key", "federal_action_obligation", "action_date"]
-    order += [c for c in COLUMNS if c not in order and c != "federal_action_obligation"]
-    order += ["federal_action_obligation_raw", "action_date_raw"] + ([DELTA_COLUMN] if delta else []) + ["source_file", "source_row"]
+    order = [kind.key] + money_cols + date_cols
+    order += [c for c in table.column_names if c not in order and c != DELTA_COLUMN]
+    order += [f"{c}_raw" for c in money_cols + date_cols]
+    order += ([DELTA_COLUMN] if delta else []) + ["source_file", "source_row"]
     typed = pa.table({name: columns[name] for name in order})
-    keys = table["contract_transaction_unique_key"].combine_chunks()
+    keys = table[kind.key].combine_chunks()
     blank_keys = pc.sum(pc.equal(pc.utf8_trim_whitespace(keys), "")).as_py() or 0
-    total = pc.sum(money).as_py()
+    total = pc.sum(columns["federal_action_obligation"]).as_py()
     stats = {"rows": table.num_rows, "bad_money": bad_money, "bad_dates": bad_dates, "blank_keys": blank_keys,
              "bad_indicators": bad_indicators,
              "obligation_sum": str(total) if total is not None else "0"}
     return typed, stats
 
 
-def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, reserve_gib: float = 8) -> dict:
+def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, reserve_gib: float = 8,
+            kind: str | Kind = "contracts") -> dict:
     """Write one typed Parquet file per CSV member. Never extracts the CSV to disk.
 
     Every byte written to Parquet, footer included, goes through a writer that checks the free-space
     reserve first; crossing it stops the run.
     """
+    kind = KINDS[kind] if isinstance(kind, str) else kind
     zip_path, out_dir = Path(zip_path), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
-    report = {"source_zip": zip_path.name, "members": [], "columns": list(COLUMNS)}
+    report = {"source_zip": zip_path.name, "kind": kind.name, "members": [], "columns": list(kind.columns)}
     with zipfile.ZipFile(zip_path) as archive:
         members = sorted((i for i in archive.infolist() if i.filename.lower().endswith(".csv")),
                          key=lambda i: i.filename)
@@ -136,10 +137,13 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, rese
             if len(present) > 1:
                 raise ValueError(f"{info.filename} has more than one correction/delete column: {present}")
             delta = present[0] if present else None
-            wanted = list(COLUMNS) + ([delta] if delta else [])
-            missing = [c for c in wanted if c not in header]
+            missing = [c for c in kind.columns if c not in header]
             if missing:
-                raise ValueError(f"{info.filename} is missing expected columns: {missing}")
+                raise ValueError(f"{info.filename} is missing expected {kind.name} columns: {missing}")
+            optional = [c for c in kind.optional if c in header and c not in kind.columns]
+            wanted = list(kind.columns) + optional + ([delta] if delta else [])
+            if index == 0:
+                report["optional_columns_present"] = optional
             target = out_dir / f"part-{index:04d}.parquet"
             member = {"source_file": info.filename, "output": target.name, "rows": 0, "bad_money": 0,
                       "bad_dates": 0, "blank_keys": 0, "bad_indicators": 0, "obligation_sum": "0",
@@ -159,7 +163,7 @@ def extract(zip_path: str | Path, out_dir: str | Path, block_mib: int = 16, rese
                 for batch in reader:
                     if batch.num_rows == 0:
                         continue
-                    typed, stats = type_batch(batch, info.filename, row, delta)
+                    typed, stats = type_batch(batch, info.filename, row, delta, kind)
                     row += batch.num_rows
                     if writer is None:
                         sink = GuardedFile(target, reserve_gib)
@@ -190,9 +194,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("zip_path")
     parser.add_argument("out_dir")
+    parser.add_argument("--kind", choices=sorted(KINDS), default="contracts")
     parser.add_argument("--reserve-gib", type=float, default=8)
     args = parser.parse_args()
-    report = extract(args.zip_path, args.out_dir, reserve_gib=args.reserve_gib)
+    report = extract(args.zip_path, args.out_dir, reserve_gib=args.reserve_gib, kind=args.kind)
     print(json.dumps({k: v for k, v in report.items() if k != "members"}, indent=2))
     # Unparseable values are kept as null and counted, never turned into zero, and any of them
     # stops the run: one omitted obligation can dominate a total. Blank values are not errors.
