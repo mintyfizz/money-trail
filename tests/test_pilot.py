@@ -18,7 +18,7 @@ class PilotTests(unittest.TestCase):
             archive.writestr('data.csv', 'id,amount\n001,1.20\n002,-0.20\n')
         data = payload.getvalue()
         name = 'FY2025_TestAgency_Contracts_Full_fixture.zip'
-        record = {'file_name': name, 'type': 'contracts', 'agency_id': 1,
+        record = {'file_name': name, 'type': 'contracts', 'agency_id': 1, 'updated_date': '2026-11-06',
                   'url': 'https://files.usaspending.gov/award_data_archive/' + name,
                   'http': {'bytes': len(data), 'etag': '"v1"', 'last_modified': 'fixture'}}
         starts = []
@@ -50,3 +50,38 @@ class PilotTests(unittest.TestCase):
                    {'type': 'contracts', 'file_name': 'FY2025_Agency_Contracts.zip', 'url': 'b', 'http': {'bytes': 10}}]
         with self.assertRaisesRegex(ValueError, 'overlap'):
             select_records(records)
+
+    def test_three_agencies_are_processed_then_released_sequentially(self):
+        from urllib.parse import urlparse
+        records, payloads = [], {}
+        for index in range(3):
+            payload = io.BytesIO()
+            name = f'FY2025_Agency{index}_Contracts_Full_20261106.zip'
+            with zipfile.ZipFile(payload, 'w', zipfile.ZIP_STORED) as archive:
+                archive.writestr('data.csv', 'id,value\n' + ''.join(f'{row:03d},1.00\n' for row in range(index + 1)))
+            payloads[name] = payload.getvalue()
+            records.append({'file_name': name, 'type': 'contracts', 'agency_id': index,
+                            'updated_date': '2026-11-06',
+                            'url': 'https://files.usaspending.gov/award_data_archive/' + name,
+                            'http': {'bytes': len(payloads[name]), 'etag': f'"v{index}"', 'last_modified': 'fixture'}})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog = root / 'catalog.json'
+            save_json(catalog, {'complete': True, 'files': records})
+            def transfer(url, start, end, etag, body, headers):
+                name = Path(urlparse(url).path).name
+                if name == records[2]['file_name']:
+                    self.assertFalse((root / 'raw' / records[1]['file_name']).exists())
+                    self.assertTrue((root / 'raw' / records[0]['file_name']).exists())
+                data = payloads[name]
+                Path(body).write_bytes(data[start:end + 1])
+                Path(headers).write_text(f'HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{end}/{len(data)}\r\nETag: {etag}\r\n\r\n')
+                return subprocess.CompletedProcess([], 0, b'', b'')
+            by_url = {record['url']: record['http'] for record in records}
+            with patch('ingest.archive.head', side_effect=lambda url: by_url[url]), patch('ingest.archive.fetch_range', side_effect=transfer):
+                report = run(catalog, root, limit=3, reserve_gib=0)
+            self.assertEqual([item['retention']['status'] for item in report['files']], ['retained', 'deleted', 'deleted'])
+            self.assertEqual([item['csv_rows'] for item in report['files']], [1, 2, 3])
+            with patch('ingest.archive.head', side_effect=AssertionError('must stay offline')):
+                again = run(catalog, root, limit=3, reserve_gib=0)
+            self.assertEqual([item['retention']['status'] for item in again['files']], ['retained', 'already_deleted', 'already_deleted'])

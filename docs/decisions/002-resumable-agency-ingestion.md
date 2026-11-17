@@ -1,6 +1,6 @@
 # Decision 002 — sequential agency downloads and streamed processing
 
-Date: 17 November 2026. Status: accepted implementation direction; live source verification and offload destination remain outstanding. This refines decision 001 and preserves its incomplete measurement status.
+Date: 17 November 2026. Status: accepted implementation direction; live source verification remains outstanding. The raw-ZIP retention policy below is superseded by decision 003. This refines decision 001 and preserves its incomplete measurement status.
 
 ## Download first, process second
 

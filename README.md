@@ -2,9 +2,9 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: milestone 1 initiated, not complete.** Per-agency discovery, sequential resumable downloads, full ZIP verification and batch Parquet conversion are implemented. FY2025 national ZIP sizes were verified; a 10,000-record contract prefix was inspected. Full national downloads, assistance profiling and official-total reconciliation are still outstanding. There is no dashboard or scheduled refresh yet.
+**Status: milestone 1 initiated, not complete.** Per-agency discovery, sequential resumable downloads, full ZIP verification batch Parquet conversion, independent value/count validation and guarded ZIP deletion are implemented. FY2025 national ZIP sizes were verified; a 10,000-record contract prefix was inspected. Full national downloads, assistance profiling and official-total reconciliation are still outstanding. There is no dashboard or scheduled refresh yet.
 
-See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), and [next steps](docs/NEXT.md).
+See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), and [next steps](docs/NEXT.md).
 
 ## The three questions
 
@@ -48,13 +48,23 @@ Discover FY2025 contract archives **per agency**, then complete the smallest ava
 .venv/bin/python -m pipeline.pilot --manifest docs/measurements/fy2025-agencies.json --limit 1
 ```
 
-The pilot completes one agency's download, verifies every ZIP member, then converts its CSVs before starting another agency. Increase `--limit` deliberately after measuring space. Agency catalog completeness is not proof of national coverage; missing agency files are recorded, and national plus per-agency archives cannot be mixed. Use `--agency-ids` to select known database IDs from the official agency list. National discovery requires explicit `--agency all` and is separate from this pilot.
+The pilot completes one agency's download, verifies every ZIP member, converts and independently validates its CSVs, then removes that ZIP before starting another agency. One small real agency ZIP is permanently retained as a local importer fixture. Increase `--limit` deliberately after measuring space. Agency catalog completeness is not proof of national coverage; missing agency files are recorded, and national plus per-agency archives cannot be mixed. Use `--agency-ids` to select known database IDs from the official agency list. National discovery requires explicit `--agency all` and is separate from this pilot.
 
 The download uses **one connection at a time**, with 8 MiB range requests and an 8 GiB free-space reserve. Rerun the same command after a connection failure. A `.zip.part` checkpoint carries the URL, source size, strong ETag and checksum of the saved prefix. Every response must be HTTP 206 with the exact requested range and matching ETag before bytes are appended. Changed source files, ignored range requests and altered checkpoints stop the transfer; no silent restart, merge or national-file fallback occurs. A process kill during the final append/checkpoint window can require manual inspection; normal network interruptions are resumable.
 
 Only a complete archive whose members pass CRC validation becomes `.zip`, with a SHA-256 receipt. The processor requires that receipt and verifies its checksum before reading. It reads 4 MiB CSV input blocks, writes Zstandard Parquet in bounded parts, caps total output at 2 GiB per agency by default, and checks free space before every output write. No expanded CSV or processing spill file is created.
 
-All source values are preserved as strings in this initial Parquet layer, including leading-zero codes, blank strings and negative amount text. Financial typing, key uniqueness and official-total reconciliation remain modeling work. Rows with the wrong number of fields are saved in `rejects.jsonl`; malformed syntax, schema changes and other parse failures stop processing. A failed conversion stays in a hidden staging directory for inspection and is never exposed as completed output. `data/pilot-run.json` records the selected-file status and interrupted phase.
+Every source column stays in the raw Parquet layer as text: leading-zero codes, blank strings, literal `NULL`/`NaN`, spaces, embedded newlines and negative amount text are preserved. CSV quoting is decoded; this is field-value preservation, not a byte-for-byte CSV/ZIP copy. Typing, filtering and modeling must read this raw layer in a separate step.
+
+Each row also has `_mt_source_zip`, `_mt_source_file` (the CSV member path), and `_mt_source_row_number` (integer, 1-based logical CSV record, header = 1). Embedded newlines do not increase that number; rejected rows leave gaps. A source column colliding with these reserved names stops conversion rather than overwriting data.
+
+An independent strict Python CSV reader counts all records and computes a digest of every accepted field value and its provenance. Arrow processes the source in batches. Every Parquet part is read back and its values are checked against that independent digest. Both CSV readers must agree on rejected records; `rejects.jsonl` keeps their exact decoded text including line endings and logical row number, and is read back too. For every member and archive, **Parquet rows + rejected rows must equal independently counted CSV rows**. Bad quoting, invalid UTF-8, schema drift, parser disagreement or a read-back mismatch leaves the ZIP and hidden staging directory in place.
+
+Before deletion, the durable manifest records the ZIP SHA-256, byte size, source URL/identity, snapshot date, CSV/Parquet/reject counts, output checksums and measured Parquet-to-ZIP size ratio. All output files are flushed to disk and re-hashed; a durable deletion record is saved before unlinking. ZIP receipts and manifests remain. A rerun verifies preserved artifacts and reuses them without redownloading a deleted ZIP. These checks reduce parsing risk; they cannot prove the original bytes or rule out a shared parser bug.
+
+The first successfully validated, nonempty agency ZIP no larger than 64 MiB is pinned in `data/raw/fixture.json` and never automatically deleted. Until one is available, other ZIPs stay local. A missing/altered fixture blocks later deletions. Archives without a snapshot date or with non-CSV members are retained. `--keep-zips` retains all newly processed ZIPs; it does not restore earlier deletions. Older Parquet outputs without the new validation must be rebuilt explicitly from their retained ZIPs.
+
+`data/pilot-run.json` records each selected agency's compressed size, Parquet size, size ratio, conversion duration, retention outcome and free disk afterward. Start with `--limit 1`, then measure a few additional agencies before expanding. Neither the national ZIP size nor these small files establishes whether a whole year fits above the 8 GiB reserve.
 
 To run the steps separately:
 
@@ -63,7 +73,7 @@ To run the steps separately:
 .venv/bin/python -m pipeline.bronze data/raw/VERIFIED_AGENCY_FILE.zip --max-output-gib 2
 ```
 
-Replace `VERIFIED_AGENCY_FILE.zip` with the actual filename in the manifest. **Raw ZIPs are retained locally.** Offloading and local removal are not enabled until a destination is selected and a verified copy exists there. A cloud sync folder can still keep a local copy and is not automatically an offload.
+Replace `VERIFIED_AGENCY_FILE.zip` with the actual filename in the manifest. Standalone `pipeline.bronze` conversion retains the ZIP; the sequential `pipeline.pilot` applies the validated deletion policy. Cloud storage is optional and remains unconfigured.
 
 The initial national `.zip.partial` is an explicitly incomplete diagnostic prefix, with no resume checkpoint. It is preserved separately and never adopted by the new downloader. Its sample remains reproducible with:
 
@@ -71,7 +81,7 @@ The initial national `.zip.partial` is an explicitly incomplete diagnostic prefi
 .venv/bin/python -m ingest.sample_prefix data/raw/FY2025_All_Contracts_Full_20261106.zip.partial --limit 10000 --output docs/measurements/fy2025-contracts-prefix-sample.json
 ```
 
-Live source access remains unresolved: [access check](docs/measurements/source-access-check.json). Controlled tests establish our recovery behavior, not Treasury's current range support. No transfer is left running.
+Live source access remains unresolved: [latest agency-discovery check](docs/measurements/retention-source-access-check.json) and [earlier range check](docs/measurements/source-access-check.json). Controlled tests establish our recovery behavior, not Treasury's current range support. No transfer is left running.
 
 ## Planned pipeline
 
@@ -88,7 +98,7 @@ Live source access remains unresolved: [access check](docs/measurements/source-a
 | Folder | Purpose |
 | --- | --- |
 | `ingest/` | Downloader and file checks |
-| `pipeline/` | PySpark conversion, award model, aggregates, change tracking |
+| `pipeline/` | Raw Parquet preservation, validation and retention; typed modeling remains planned |
 | `site/` | Static dashboard |
 | `docs/decisions/` | Decision records |
 | `docs/measurements/` | Source metadata and explicitly scoped profiling results |

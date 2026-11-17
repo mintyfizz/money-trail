@@ -251,6 +251,11 @@ def _download(record, directory, reserve_gib, chunk_bytes):
             receipt["zip"] = verify_zip(target)
             receipt["zip_crc_status"] = "verified"
             save_json(receipt_path, receipt)
+        if record.get("updated_date") and receipt.get("snapshot_date") != record["updated_date"]:
+            if receipt.get("snapshot_date") is not None:
+                raise RuntimeError("Source snapshot date differs from receipt")
+            receipt["snapshot_date"] = record["updated_date"]
+            save_json(receipt_path, receipt)
         return target
     if head(url) != expected:
         raise RuntimeError("Source metadata changed; rediscover before downloading")
@@ -311,6 +316,7 @@ def _download(record, directory, reserve_gib, chunk_bytes):
             raise DownloadInterrupted(f"Connection interrupted; {start + received:,} bytes saved. Rerun to resume.")
     zip_info = verify_zip(partial)
     receipt = {"url": url, **expected, "sha256": digest.hexdigest(),
+               "snapshot_date": record.get("updated_date"),
                "retrieved_at": now(), "elapsed_seconds": round(time.monotonic() - started, 2),
                "zip_crc_status": "verified", "zip": zip_info}
     save_json(receipt_path, receipt)
