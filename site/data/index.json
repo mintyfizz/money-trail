@@ -1,0 +1,11 @@
+{
+ "generated_at": "2026-11-17T13:08:02+00:00",
+ "years": [
+  {
+   "fiscal_year": 2025,
+   "snapshot_date": "2026-11-06",
+   "net_obligations_cents": 84340714013753,
+   "reconciliation_status": "gaps"
+  }
+ ]
+}
