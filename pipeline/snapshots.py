@@ -40,8 +40,17 @@ def release_info(repository, tag, missing_ok=False):
     try:
         return api(f'repos/{repository}/releases/tags/{tag}')
     except subprocess.CalledProcessError as error:
-        if missing_ok and 'HTTP 404' in error.stderr:
-            return None
+        if 'HTTP 404' in (error.stderr or ''):
+            # Drafts have no published tag yet; list releases with authenticated access.
+            pages = json.loads(gh('api', '--paginate', '--slurp',
+                                  f'repos/{repository}/releases?per_page=100'))
+            matches = [release for page in pages for release in page if release['tag_name'] == tag]
+            if len(matches) > 1:
+                raise RuntimeError('Ambiguous release tag')
+            if matches:
+                return matches[0]
+            if missing_ok:
+                return None
         raise
 
 
@@ -113,6 +122,8 @@ def publish(raw, directory, catalog_path, run_path, repository, commit, revision
            '--title', f'{record["agency_name"]} FY{record["fiscal_year"]} — {manifest["snapshot_date"]}',
            '--notes-file', notes)
         existing = release_info(repository, tag)
+    if existing['target_commitish'] != commit:
+        raise RuntimeError('Release belongs to a different code revision; choose a new snapshot revision')
     remote = {asset['name']: asset for asset in release_assets(repository, existing['id'])}
     if set(remote) - set(expected):
         raise RuntimeError('Release contains unexpected assets; no assets replaced or removed')

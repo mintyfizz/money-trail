@@ -31,15 +31,19 @@ class ReleaseServer:
         args = list(map(str, args))
         if args[0] == 'api':
             if args[1:3] == ['--paginate', '--slurp']:
-                return json.dumps([self.assets()])
+                if '/assets?' in args[3]:
+                    return json.dumps([self.assets()])
+                return json.dumps([[self.info] if self.info is not None else []])
             if '/releases/tags/' in args[1]:
-                if self.info is None:
+                if self.info is None or self.info['draft']:
                     raise subprocess.CalledProcessError(1, args, stderr='HTTP 404')
                 return json.dumps(self.info)
             return '{}'
         action, tag = args[1:3]
         if action == 'create':
-            self.info = {'id': 1, 'draft': True, 'html_url': 'https://github.com/test/repo/releases/tag/' + tag}
+            self.info = {'id': 1, 'draft': True, 'tag_name': tag,
+                         'target_commitish': args[args.index('--target') + 1],
+                         'html_url': 'https://github.com/test/repo/releases/tag/' + tag}
         elif action == 'upload':
             path = Path(args[3])
             if not self.info['draft'] or path.name in self.files:
@@ -160,3 +164,9 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.publish()
         self.assertIsNone(self.server.info)
+
+    def test_existing_release_from_different_commit_is_not_reused(self):
+        self.publish()
+        self.server.info['target_commitish'] = 'b' * 40
+        with self.assertRaisesRegex(RuntimeError, 'different code revision'):
+            self.publish()
