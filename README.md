@@ -2,9 +2,25 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: the first remote raw-data pilot passed; milestone 1 remains in progress.** A GitHub runner downloaded and verified the smallest nonempty agency in the saved catalogue: Library of Congress FY2025 contracts, 106 rows, 297 source columns and zero rejects. The 20,541-byte ZIP produced 119,809 bytes of text-preserving Parquet (5.8327×). The original ZIP and verified outputs are retained in a [private release](https://github.com/mintyfizz/money-trail/releases/tag/snapshot-2026-11-06-fy2025-contracts-agency-3-r2); the Mac downloaded only Parquet/records, with 21.52 GiB free afterward. Four smaller archives contained headers only. The saved catalogue remains partial (17 of 112 agencies); no national conversion, assistance profiling or official-total reconciliation is complete. There is no dashboard or scheduled refresh yet.
+**Status: FY2025 national contracts built end to end as a diagnostic pilot; reconciliation does not pass yet.** A GitHub runner downloads Treasury's FY2025 national contracts archive (1.83 GB, 6,658,878 transactions), streams it into a typed transaction layer, aggregates it by state, agency and recipient, and compares each state with USAspending's published totals. All quality gates pass (no unparseable or missing amounts or dates, no duplicate keys). The comparison does not: the archive as published runs about 1.9% above USAspending across the 50 states and DC, with the difference concentrated in Defense contracts that Treasury re-keyed on 4 November 2026. See [decision 005](docs/decisions/005-national-typed-layer.md). The dashboard in `site/` is a local prototype until the gap is explained.
 
-See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), [remote snapshot decision](docs/decisions/004-remote-snapshots.md), and [next steps](docs/NEXT.md).
+See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), [remote snapshot decision](docs/decisions/004-remote-snapshots.md), [national typed layer decision](docs/decisions/005-national-typed-layer.md), and [next steps](docs/NEXT.md).
+
+## National build (FY2025 pilot)
+
+`.github/workflows/build-pilot.yml` runs on a GitHub runner when the `run/build-pilot` branch is pushed:
+
+1. **Delta job:** downloads the monthly delta file, types it, writes the transaction keys it marks as deleted, summarises what changed, and preserves all of it in a verified release.
+2. **Year job:** downloads the national full file (space checked first), streams each CSV member from the ZIP into typed Parquet (`pipeline/silver.py`), aggregates it with blocking quality gates (`pipeline/gold.py`), and compares it with USAspending by state and by agency (`pipeline/reconcile.py`). The source ZIP, the typed layer and an audit file of rows whose keys the delta deletes are preserved in a release that is published only after every file's SHA-256 is verified (`pipeline/release.py`).
+3. **Site data:** combines the results into `site/data/` for the dashboard (`pipeline/site_data.py`).
+
+Money is exact integer cents from source to page. Unparseable values, missing amounts or dates, duplicate keys and rows outside the fiscal year stop the build rather than being counted as zero. The free-space reserve (8 GiB) is checked before each download and on every Parquet write.
+
+To view the dashboard locally after downloading the `site-data` artifact into `site/data/`:
+
+```sh
+python3 -m http.server 8765 --directory site
+```
 
 ## The three questions
 
@@ -110,8 +126,8 @@ Direct Mac source access remains intermittent (the separate GitHub runner probe 
 | Folder | Purpose |
 | --- | --- |
 | `ingest/` | Downloader and file checks |
-| `pipeline/` | Raw Parquet preservation, validation and retention; typed modeling remains planned |
-| `site/` | Static dashboard |
+| `pipeline/` | Raw Parquet preservation and retention; national typed layer, aggregates, reconciliation, change records and verified releases |
+| `site/` | Static dashboard: clickable state map, year control, state panel (local prototype) |
 | `docs/decisions/` | Decision records |
 | `docs/measurements/` | Source metadata and explicitly scoped profiling results |
 | `tests/` | Offline ingestion and integrity checks |
