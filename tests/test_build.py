@@ -343,6 +343,12 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([r["contract_transaction_unique_key"] for r in rows], ["OLD_2"])
         self.assertEqual(rows[0]["source_row"], 2)
 
+    def test_release_asset_names_match_github(self):
+        from pipeline import release
+        self.assertEqual(release.asset_name("FY(All)_All_Contracts_Delta_20261106.zip"),
+                         "FY.All._All_Contracts_Delta_20261106.zip")
+        self.assertEqual(release.asset_name("part-0001.parquet"), "part-0001.parquet")
+
     def test_fetch_picks_latest_file(self):
         from pipeline import fetch
         files = [{"file_name": "FY2025_All_Contracts_Full_20261006.zip", "url": "u1"},

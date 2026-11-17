@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +25,12 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def asset_name(name: str) -> str:
+    """The name GitHub will store: it replaces characters outside letters, digits, '.', '-' and '_'
+    (for example the parentheses in Treasury's 'FY(All)' file names) with '.'."""
+    return re.sub(r"[^A-Za-z0-9._-]", ".", name)
 
 
 def call(method: str, url: str, token: str, body=None, data=None, headers=None):
@@ -51,14 +58,17 @@ def preserve(repository: str, tag: str, title: str, notes: str, files: list[Path
     except urllib.error.HTTPError as error:
         if error.code != 404:
             raise
-    expected = {p.name: {"size": p.stat().st_size, "sha256": sha256(p)} for p in files}
+    expected = {asset_name(p.name): {"source_name": p.name, "size": p.stat().st_size, "sha256": sha256(p)}
+                for p in files}
+    if len(expected) != len(files):
+        raise RuntimeError("Two files map to the same release asset name")
     release = call("POST", f"{API}/repos/{repository}/releases", token,
                    body={"tag_name": tag, "target_commitish": "main", "name": title, "body": notes,
                          "draft": True, "prerelease": True})
     upload_base = release["upload_url"].split("{")[0]
     for path in files:
         with path.open("rb") as stream:
-            call("POST", f"{upload_base}?name={urllib.parse.quote(path.name)}", token, data=stream,
+            call("POST", f"{upload_base}?name={urllib.parse.quote(asset_name(path.name))}", token, data=stream,
                  headers={"Content-Type": "application/octet-stream", "Content-Length": str(path.stat().st_size)})
     assets = call("GET", f"{API}/repos/{repository}/releases/{release['id']}/assets?per_page=100", token)
     remote = {a["name"]: a for a in assets}
