@@ -4,6 +4,7 @@ data/
 *.csv
 *.zip
 *.gz
+*.partial
 
 # python
 .venv/

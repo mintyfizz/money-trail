@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-11-17T06:44:53.776005+00:00",
+  "disk_free_bytes": 12435312640,
+  "reserve_bytes": 8589934592,
+  "fy2025_compressed_bytes": 3245622047,
+  "completed_years_2008_through_2026": 19,
+  "scenario_compressed_bytes": 61666818893,
+  "scenario_method": "19 times FY2025 all-agency contracts plus all financial assistance compressed bytes; not an observed history inventory",
+  "source_status": "Empty responses interrupted subsequent discovery/download requests",
+  "full_contract_download_completed": false,
+  "full_assistance_download_completed": false,
+  "sample_rows": 10000,
+  "sample_columns": 297
+}
