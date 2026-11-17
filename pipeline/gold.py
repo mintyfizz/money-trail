@@ -124,6 +124,30 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
     stale = con.execute("SELECT count(*), sum(federal_action_obligation) FROM stale").fetchone()
     full = con.execute("SELECT count(*), sum(federal_action_obligation) FROM source").fetchone()
     deleted_listed = con.execute("SELECT count(*) FROM deleted").fetchone()[0]
+    # Diagnostic: group matched rows by the exact last-modified time of their surviving twin (same
+    # key apart from the final transaction number, same modification, date and amount, not itself
+    # deleted). Re-keying happens in batches, and the batches behave differently in USAspending.
+    batches = con.execute(f"""
+        WITH m AS (
+          SELECT s.contract_transaction_unique_key AS k, s.federal_action_obligation AS amount,
+                 regexp_replace(s.contract_transaction_unique_key, '_[^_]*$', '') AS ak,
+                 s.modification_number, s.action_date,
+                 s.award_type_code IN ('A', 'B', 'C', 'D')
+                   AND upper(trim(s.primary_place_of_performance_state_code)) IN ({sql_list(STATES)})
+                   AND upper(trim(s.primary_place_of_performance_country_code)) IN ('USA', '') AS in_state_contracts
+          FROM stale s),
+        twins AS (
+          SELECT m.k, any_value(m.amount) AS amount, any_value(m.in_state_contracts) AS in_state_contracts,
+                 min(t.last_modified_date) AS twin_modified
+          FROM m LEFT JOIN source t
+            ON regexp_replace(t.contract_transaction_unique_key, '_[^_]*$', '') = m.ak
+           AND t.modification_number = m.modification_number AND t.action_date = m.action_date
+           AND t.federal_action_obligation = m.amount AND t.contract_transaction_unique_key <> m.k
+           AND NOT EXISTS (SELECT 1 FROM deleted d WHERE d.k = t.contract_transaction_unique_key)
+          GROUP BY m.k)
+        SELECT twin_modified, count(*), sum(amount),
+               count(*) FILTER (WHERE in_state_contracts), sum(amount) FILTER (WHERE in_state_contracts)
+        FROM twins GROUP BY 1 ORDER BY abs(sum(amount)) DESC NULLS LAST""").fetchall()
     if stale_out:
         # Audit trail: every row removed, with where it came from, so the exclusion can be checked.
         audit = con.execute("""SELECT contract_transaction_unique_key, contract_award_unique_key, federal_action_obligation,
@@ -214,6 +238,10 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
                                 "deleted_keys_listed": deleted_listed, "applied": apply_deleted_keys,
                                 "meaning": ("Rows whose keys the same release's delta file lists as deleted. "
                                             "Reported for diagnosis; not removed unless applied.")},
+        "deleted_key_batches": [
+            {"twin_last_modified": b or None, "rows": n, "cents": cents(c),
+             "state_contract_rows": sn, "state_contract_cents": cents(sc)}
+            for b, n, c, sn, sc in batches],
         "full_snapshot": {"rows": full[0], "net_obligations_cents": cents(full[1]),
                           "note": "The source file as published. Totals above equal this unless deleted keys were applied."},
         "states": dict(sorted(states.items())),

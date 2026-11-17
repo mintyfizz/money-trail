@@ -361,6 +361,23 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([r["contract_transaction_unique_key"] for r in rows], ["OLD_2"])
         self.assertEqual(rows[0]["source_row"], 2)
 
+    def test_deleted_key_batches_group_by_twin_time(self):
+        import pyarrow as pa, pyarrow.parquet as pq
+        out = self.summary_of([
+            row("A_P1_X_2", "100.00", last_modified_date="2025-01-01 00:00:00+00", modification_number="P1"),
+            row("A_P1_X_14", "100.00", last_modified_date="2026-11-04 10:11:48+00", modification_number="P1"),
+            row("B_P2_Y_1", "50.00", last_modified_date="2025-02-01 00:00:00+00", modification_number="P2", state="DEU"),
+            row("B_P2_Y_0", "50.00", last_modified_date="2026-11-02 14:06:57+00", modification_number="P2", state="DEU"),
+            row("C_P3_Z_1", "7.00", modification_number="P3")])
+        deleted = self.root / "batch-keys.parquet"
+        pq.write_table(pa.table({"contract_transaction_unique_key": ["A_P1_X_2", "B_P2_Y_1", "C_P3_Z_1"]}), deleted)
+        result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted)
+        batches = {b["twin_last_modified"]: b for b in result["deleted_key_batches"]}
+        self.assertEqual(batches["2026-11-04 10:11:48+00"]["cents"], 10000)
+        self.assertEqual(batches["2026-11-04 10:11:48+00"]["state_contract_cents"], 10000)
+        self.assertEqual(batches["2026-11-02 14:06:57+00"]["state_contract_rows"], 0)
+        self.assertEqual(batches[None]["rows"], 1)  # no surviving twin
+
     def test_duckdb_exports_are_guarded(self):
         from pipeline import guard
         delta_zip = self.root / "gd.zip"
