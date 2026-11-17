@@ -126,7 +126,7 @@
     const anyNegative = Object.keys(yearData().states).some((c) => (value(c) ?? 0) < 0);
     $("legend").innerHTML = `
       <div class="legend-swatches">${RAMP.map((c) => `<span style="background:${c}"></span>`).join("")}</div>
-      <div class="legend-labels"><span></span>${cuts.map((c) => `<span>${fmt(c)}</span>`).join("")}</div>
+      <div class="legend-labels">${cuts.map((c, i) => `<span style="left:calc(${i + 1} * 3.5rem)">${fmt(c)}</span>`).join("")}</div>
       ${anyNegative ? `<span class="legend-negative"><i></i> Net de-obligation (more taken back than committed)</span>` : ""}`;
     $("map-note").textContent = state.measure === "per_resident"
       ? "Shading groups states into seven equal-count bands of net obligations per resident."
@@ -154,7 +154,8 @@
   /* ---------- Headline ---------- */
   function renderLede() {
     const d = yearData();
-    $("lede").innerHTML = `In fiscal year ${d.fiscal_year}, federal agencies made a net <span class="figure">${money(d.national.net_obligations_cents)}</span> in contract commitments. Select a state to see which agencies and companies were behind its share.`;
+    $("lede").innerHTML = `Federal agencies committed a net <span class="figure">${money(d.national.net_obligations_cents)}</span> in contracts in fiscal year ${d.fiscal_year}.`;
+    $("lede-sub").textContent = "Select a state to see which agencies paid for work there and which companies received it.";
     document.title = `Money Trail: federal contracts, fiscal year ${d.fiscal_year}`;
   }
 

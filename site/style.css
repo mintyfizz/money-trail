@@ -70,8 +70,9 @@ main { padding: 0 clamp(1rem, 4vw, 3rem) 3rem; }
 
 /* The one bold element: a sentence that carries the national figure, then the map. */
 .lede {
-  max-width: 34ch; margin: 1.75rem 0 1.25rem; font: 400 var(--step-4)/1.12 var(--serif); letter-spacing: -0.015em;
+  max-width: 28ch; margin: 1.75rem 0 0.4rem; font: 400 var(--step-4)/1.12 var(--serif); letter-spacing: -0.015em;
 }
+.lede-sub { margin: 0 0 1.5rem; color: var(--ink-soft); max-width: 60ch; }
 .lede .figure { font-weight: 500; color: var(--green-dark); white-space: nowrap; }
 
 .atlas { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(19rem, 1fr); gap: 1.5rem 2.5rem; align-items: start; }
@@ -93,11 +94,9 @@ main { padding: 0 clamp(1rem, 4vw, 3rem) 3rem; }
 figcaption { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 0.5rem 1.5rem; margin-top: 0.5rem; }
 .legend { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--step--1); color: var(--ink-soft); }
 .legend-swatches { display: flex; }
-.legend-swatches span { width: 2.75rem; height: 0.6rem; }
-.legend-labels { display: flex; }
-.legend-labels span { width: 2.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.legend-labels span:not(:first-child) { margin-left: -1.375rem; text-align: center; width: 2.75rem; }
-.legend-labels span:first-child { width: 1.375rem; }
+.legend-swatches span { width: 3.5rem; height: 0.6rem; }
+.legend-labels { position: relative; height: 1.1rem; width: calc(7 * 3.5rem); }
+.legend-labels span { position: absolute; top: 0; transform: translateX(-50%); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .legend-negative { display: inline-flex; align-items: center; gap: 0.35rem; }
 .legend-negative i { width: 0.8rem; height: 0.6rem; background: var(--red); display: inline-block; }
 .map-note { margin: 0; max-width: 40ch; font-size: var(--step--1); color: var(--ink-soft); }
