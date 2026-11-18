@@ -4,7 +4,7 @@ The national build covers contracts and financial assistance for FY2021–2025, 
 each preserved with its source and checked against USAspending (see the coverage table on the site
 and `site/data/index.json`). It is merged into `main` (PR #2, with the follow-up PR #3) and the
 dashboard is public at https://money-trail-delta.vercel.app/, deployed by hand from `site/` at
-`94ce150` (see the Release section of the README). The repository and its releases stay private.
+`94ce150` (see [Release](ENGINEERING.md#release) in the engineering notes). The repository and its releases stay private.
 PR #1 (milestone 1, per-agency ingestion) is earlier work.
 
 Open items, in the order they would matter to a reader:
