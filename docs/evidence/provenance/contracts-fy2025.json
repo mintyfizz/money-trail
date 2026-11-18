@@ -1,0 +1,11 @@
+{
+ "source_release": "build-fy2025-contracts-2026-11-06-47b4a4d",
+ "build_release": "build-contracts-fy2025-2026-11-06-ed67f1b2ed2c-3ca8006",
+ "code_commit": "3ca80065b7b6ebba612931473bf274efa7568374",
+ "source_name": "FY2025_All_Contracts_Full_20261106.zip",
+ "source_sha256": "ed67f1b2ed2ce5fce3543894c809e7d735418a8898d48183deacc6f1aa801e4b",
+ "snapshot_id": "contracts-fy2025-2026-11-06-ed67f1b2ed2c",
+ "run": "https://github.com/mintyfizz/money-trail/actions/runs/44207572323",
+ "deleted_keys_release": "build-delta-contracts-2026-11-06-47b4a4d",
+ "recorded": "after the run, from its releases (the workflow writes this file from the next run on)"
+}

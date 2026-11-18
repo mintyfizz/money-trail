@@ -40,8 +40,14 @@ python3 -m http.server 8765 --directory site
 **The published site** is built from ten scopes (contracts and financial assistance, FY2021–2025). Each scope's build release holds the small files the site needs: `summary.json`, `reconcile.json`, `provenance.json` (and `changes.json` for FY2025 contracts). Download those three or four assets for every scope into one folder per scope, then:
 
 ```sh
-python -m pipeline.site_data scopes/ site/data   # scopes/<kind>-fy<year>/{summary,reconcile,provenance}.json
+# for each scope's build release (tags listed in site/data/index.json under provenance):
+python -m pipeline.source fetch --repository mintyfizz/money-trail \
+  --tag build-assistance-fy2024-2026-11-06-b9c4c62700a8-b87f306 --dir scopes/assistance-fy2024 \
+  summary.json reconcile.json provenance.json
+python -m pipeline.site_data scopes/ site/data
 ```
+
+The two FY2025 builds ran before the workflow wrote `provenance.json`; their provenance, recorded afterwards from their releases, is in `docs/evidence/provenance/`.
 
 With fewer than ten scopes the missing ones are written as not loaded, so build into a separate folder when experimenting rather than over `site/data`.
 
