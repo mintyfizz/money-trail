@@ -85,7 +85,9 @@ main { padding: 0 clamp(1rem, 4vw, 3rem) 3rem; }
 .lede .figure { font-weight: 500; color: var(--green-dark); white-space: nowrap; }
 
 .atlas { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(19rem, 1fr); gap: 1.5rem 2.5rem; align-items: start; }
-@media (max-width: 900px) { .atlas { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .atlas { grid-template-columns: minmax(0, 1fr); } }
+.map-wrap, .panel { min-width: 0; }
+.picker select { max-width: min(22rem, 100%); }
 
 .map-wrap { position: relative; margin: 0; }
 #map { width: 100%; height: auto; display: block; }
@@ -101,10 +103,11 @@ main { padding: 0 clamp(1rem, 4vw, 3rem) 3rem; }
 @media (prefers-reduced-motion: reduce) { #map .state { transition: none; } }
 
 figcaption { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 0.5rem 1.5rem; margin-top: 0.5rem; }
-.legend { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--step--1); color: var(--ink-soft); }
-.legend-swatches { display: flex; }
-.legend-swatches span { width: 3.5rem; height: 0.6rem; }
-.legend-labels { position: relative; height: 1.1rem; width: calc(7 * 3.5rem); }
+.legend { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--step--1); color: var(--ink-soft); width: min(24.5rem, 100%); min-width: 0; }
+.legend-swatches { display: flex; width: 100%; }
+.legend-swatches span { flex: 1 1 0; height: 0.6rem; }
+.legend-labels { position: relative; height: 1.1rem; width: 100%; }
+@media (max-width: 480px) { .legend-labels span:nth-child(even) { display: none; } }
 .legend-labels span { position: absolute; top: 0; transform: translateX(-50%); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .legend-negative { display: inline-flex; align-items: center; gap: 0.35rem; }
 .legend-negative i { width: 0.8rem; height: 0.6rem; background: var(--red); display: inline-block; }
@@ -193,8 +196,18 @@ tbody tr td:first-child a:hover { text-decoration: underline; }
 .about p, .about li { max-width: 62ch; }
 .about ul { padding-left: 1.1rem; margin: 0; }
 .about li { margin-bottom: 0.35rem; }
-.source { margin-top: 1.5rem; font-size: var(--step--1); color: var(--ink-soft); }
+.source { margin-top: 1.5rem; font-size: var(--step--1); color: var(--ink-soft); overflow-wrap: anywhere; }
 
 .foot { padding: 1.25rem clamp(1rem, 4vw, 3rem) 2rem; border-top: 1px solid var(--rule); font-size: var(--step--1); color: var(--ink-soft); }
 
 .error { color: var(--red); }
+
+/* Narrow screens: controls stack and never push the page sideways. */
+.masthead > *, .controls > * { min-width: 0; }
+@media (max-width: 600px) {
+  .controls { width: 100%; }
+  .years, .picker, .measure { width: 100%; }
+  .year-buttons { flex-wrap: wrap; }
+  .picker select, .picker input { flex: 1 1 100%; width: 100%; max-width: 100%; }
+  .agency-picker .note { text-align: left; }
+}

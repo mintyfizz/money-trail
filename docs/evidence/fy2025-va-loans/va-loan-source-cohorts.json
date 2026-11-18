@@ -1,0 +1,227 @@
+[
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.118",
+    "cfda_title": "VETERANS HOUSING DIRECT LOANS FOR CERTAIN DISABLED VETERANS",
+    "modified_date": "2026-07-01",
+    "rows": 11879,
+    "subsidy_cents": 106083484688,
+    "face_cents": 383162097601
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.118",
+    "cfda_title": "VETERANS HOUSING DIRECT LOANS FOR CERTAIN DISABLED VETERANS",
+    "modified_date": "2026-09-28",
+    "rows": 2809,
+    "subsidy_cents": 21922376959,
+    "face_cents": 84754432339
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-12-01",
+    "rows": 2566,
+    "subsidy_cents": -3334404000,
+    "face_cents": 435142899040
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2024-11-22",
+    "rows": 2563,
+    "subsidy_cents": -1644692000,
+    "face_cents": 506425561735
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2024-12-22",
+    "rows": 2532,
+    "subsidy_cents": -3170494400,
+    "face_cents": 482443125175
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-07-23",
+    "rows": 2532,
+    "subsidy_cents": -3275951200,
+    "face_cents": 426939245646
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-09-23",
+    "rows": 2523,
+    "subsidy_cents": -3126431500,
+    "face_cents": 407065600123
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-06-23",
+    "rows": 2513,
+    "subsidy_cents": -3420372800,
+    "face_cents": 446719988313
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-08-24",
+    "rows": 2505,
+    "subsidy_cents": -3466726500,
+    "face_cents": 451123520540
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-05-21",
+    "rows": 2498,
+    "subsidy_cents": -3284621700,
+    "face_cents": 433491670689
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-01-22",
+    "rows": 2497,
+    "subsidy_cents": -3104159100,
+    "face_cents": 413397686165
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-04-22",
+    "rows": 2431,
+    "subsidy_cents": -2870377200,
+    "face_cents": 377735714108
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-02-21",
+    "rows": 2424,
+    "subsidy_cents": -2915958700,
+    "face_cents": 384269310907
+  },
+  {
+    "assistance_type_code": "08",
+    "cfda_number": "64.114",
+    "cfda_title": "VETERANS HOUSING GUARANTEED AND INSURED LOANS",
+    "modified_date": "2025-03-21",
+    "rows": 2370,
+    "subsidy_cents": -2518954700,
+    "face_cents": 332812278380
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.126",
+    "cfda_title": "NATIVE AMERICAN VETERAN DIRECT LOAN PROGRAM",
+    "modified_date": "2026-09-28",
+    "rows": 14,
+    "subsidy_cents": -1893100,
+    "face_cents": 315056192
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.126",
+    "cfda_title": "NATIVE AMERICAN VETERAN DIRECT LOAN PROGRAM",
+    "modified_date": "2026-07-01",
+    "rows": 10,
+    "subsidy_cents": -1535500,
+    "face_cents": 255755681
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.118",
+    "cfda_title": "VETERANS HOUSING DIRECT LOANS FOR CERTAIN DISABLED VETERANS",
+    "modified_date": "2025-02-24",
+    "rows": 5,
+    "subsidy_cents": -21613000,
+    "face_cents": 74604900
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.118",
+    "cfda_title": "VETERANS HOUSING DIRECT LOANS FOR CERTAIN DISABLED VETERANS",
+    "modified_date": "2025-01-22",
+    "rows": 3,
+    "subsidy_cents": -32692000,
+    "face_cents": 112847600
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.126",
+    "cfda_title": "NATIVE AMERICAN VETERAN DIRECT LOAN PROGRAM",
+    "modified_date": "2025-02-21",
+    "rows": 3,
+    "subsidy_cents": -1051700,
+    "face_cents": 175270500
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.126",
+    "cfda_title": "NATIVE AMERICAN VETERAN DIRECT LOAN PROGRAM",
+    "modified_date": "2024-12-09",
+    "rows": 3,
+    "subsidy_cents": -578300,
+    "face_cents": 96384400
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.126",
+    "cfda_title": "NATIVE AMERICAN VETERAN DIRECT LOAN PROGRAM",
+    "modified_date": "2024-12-22",
+    "rows": 3,
+    "subsidy_cents": -444000,
+    "face_cents": 74007800
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.126",
+    "cfda_title": "NATIVE AMERICAN VETERAN DIRECT LOAN PROGRAM",
+    "modified_date": "2026-09-17",
+    "rows": 2,
+    "subsidy_cents": -267300,
+    "face_cents": 44451539
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.118",
+    "cfda_title": "VETERANS HOUSING DIRECT LOANS FOR CERTAIN DISABLED VETERANS",
+    "modified_date": "2026-09-30",
+    "rows": 2,
+    "subsidy_cents": -12857000,
+    "face_cents": 44380739
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.118",
+    "cfda_title": "VETERANS HOUSING DIRECT LOANS FOR CERTAIN DISABLED VETERANS",
+    "modified_date": "2024-12-22",
+    "rows": 1,
+    "subsidy_cents": -7760900,
+    "face_cents": 26789500
+  },
+  {
+    "assistance_type_code": "07",
+    "cfda_number": "64.126",
+    "cfda_title": "NATIVE AMERICAN VETERAN DIRECT LOAN PROGRAM",
+    "modified_date": "2025-01-22",
+    "rows": 1,
+    "subsidy_cents": -210000,
+    "face_cents": 35000000
+  }
+]

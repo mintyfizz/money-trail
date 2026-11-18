@@ -124,7 +124,12 @@
     const empty = () => ({ amount: 0, tx: 0, missing: 0, face: 0, cats: new Map(), agencies: new Map() });
     const out = { places: new Map(), national: empty(), territories: new Map(), foreign: empty(), unknown: empty(),
                   agencyPresent: agencyIdx !== null && agencyIdx >= 0 };
-    if (agencyIdx === -1) { state.cache.set(key, out); return out; }  // agency has no awards this year
+    const fillPlaces = () => {
+      // Every one of the 51 places gets a value: no rows in scope is a known zero, because the scope is loaded.
+      for (const code of Object.keys(d.states)) if (!out.places.has(code)) out.places.set(code, empty());
+      [...out.places.entries()].sort((x, y) => y[1].amount - x[1].amount).forEach(([, t], i) => { t.rank = i + 1; });
+    };
+    if (agencyIdx === -1) { fillPlaces(); state.cache.set(key, out); return out; }  // agency has no awards this year
     const add = (t, a, cat, amount, tx, missing, face) => {
       t.amount += amount; t.tx += tx; t.missing += missing; t.face += face || 0;
       t.cats.set(cat, (t.cats.get(cat) || 0) + amount);
@@ -141,10 +146,7 @@
         add(out.territories.get(place), a, cat, amount, tx, missing, face);
       } else add(placeKind === "foreign" ? out.foreign : out.unknown, a, cat, amount, tx, missing, face);
     }
-    // Every one of the 51 places gets a value: no rows in scope is a known zero, because the scope is loaded.
-    for (const code of Object.keys(d.states)) if (!out.places.has(code)) out.places.set(code, empty());
-    const ranked = [...out.places.entries()].sort((x, y) => y[1].amount - x[1].amount);
-    ranked.forEach(([code, t], i) => { t.rank = i + 1; });
+    fillPlaces();
     state.cache.set(key, out);
     return out;
   }
@@ -215,7 +217,7 @@
     const anyNegative = Object.keys(yearData().states).some((c) => (value(c) ?? 0) < 0);
     $("legend").innerHTML = `
       <div class="legend-swatches">${RAMP.map((c) => `<span style="background:${c}"></span>`).join("")}</div>
-      <div class="legend-labels">${cuts.map((c, i) => `<span style="left:calc(${i + 1} * 3.5rem)">${fmt(c)}</span>`).join("")}</div>
+      <div class="legend-labels">${cuts.map((c, i) => `<span style="left:${((i + 1) / 7 * 100).toFixed(2)}%">${fmt(c)}</span>`).join("")}</div>
       ${anyNegative ? `<span class="legend-negative"><i></i> Net de-obligation (more taken back than committed)</span>` : ""}
       ${Object.keys(yearData().states).some((c) => value(c) === 0) ? `<span class="legend-negative"><i style="background:${NONE};outline:1px solid var(--rule)"></i> None in this selection</span>` : ""}`;
     $("map-note").textContent = `Shading groups states into seven equal-count bands${state.measure === "per_resident" ? " per resident" : ""}. Alaska and Hawaii are not to scale.`;
@@ -242,7 +244,9 @@
       $("lede").innerHTML = `${esc(scopeDef().label)} is not loaded for fiscal year ${d.fiscal_year}.`;
       $("lede-sub").textContent = "Choose another year or spending type. Years and types that are not loaded are listed under Coverage.";
     } else {
-      $("lede").innerHTML = `${who} committed a net <span class="figure">${money(agg.national.amount)}</span> in ${esc(scopeLabel())} in fiscal year ${d.fiscal_year}.`;
+      $("lede").innerHTML = state.agency && !agg.agencyPresent
+        ? `${who} has no awards in ${esc(scopeLabel())} in fiscal year ${d.fiscal_year}.`
+        : `${who} committed a net <span class="figure">${money(agg.national.amount)}</span> in ${esc(scopeLabel())} in fiscal year ${d.fiscal_year}.`;
       const loans = scopeCats().includes("loans") ? " Loans count at their subsidy cost to the government, not their face value." : "";
       $("lede-sub").textContent = `Select a state to see which agencies committed the money and who received it.${loans}`;
     }
@@ -278,11 +282,12 @@
     return notes.map((n) => `<p class="note">${n}</p>`).join("");
   }
   function sparkline(code) {
-    const points = state.years.filter(comparable).map((y) => ({ y, v: amountOf(code, y) }));
+    const points = state.years.filter(comparable).map((y) => ({ y, v: amountOf(code, y) }))
+      .filter((p) => state.measure !== "per_resident" || yearData(p.y).states[code].population);  // no invented zeros
     if (points.length < 2) return "";
     const w = 260, h = 64, pad = 18;
     const x = d3.scalePoint().domain(points.map((p) => p.y)).range([pad, w - pad]);
-    const yv = points.map((p) => state.measure === "per_resident" ? perResident(p.v, yearData(p.y).states[code].population) ?? 0 : dollars(p.v));
+    const yv = points.map((p) => state.measure === "per_resident" ? perResident(p.v, yearData(p.y).states[code].population) : dollars(p.v));
     const y = d3.scaleLinear().domain([Math.min(0, d3.min(yv)), d3.max(yv)]).nice().range([h - 16, 6]);
     const line = d3.line().x((p, i) => x(points[i].y)).y((p, i) => y(yv[i]));
     const current = points.findIndex((p) => p.y === state.year);
@@ -307,7 +312,7 @@
         <ol class="recipients">${k.recipients.slice(0, 6).map((r) => `
           <li><div class="row"><span class="name">${esc(titleCase(r.name))}</span><span class="figure${r.amount_cents < 0 ? " negative" : ""}">${money(r.amount_cents)}</span></div>
             <div class="meta">${count(r.awards)} award${r.awards === 1 ? "" : "s"}${r.parent && r.parent !== r.name ? `; part of ${esc(titleCase(r.parent))}` : ""}${r.example ? `. Largest: ${esc(sentence(r.example))}` : ""}</div></li>`).join("")}</ol>
-        ${nr && nr.amount_cents ? `<p class="note">Not ranked: ${money(nr.amount_cents)} in ${count(nr.transactions)} transactions that are not one identifiable recipient${nr.aggregate_records || nr.redacted_records ? ` (${[nr.aggregate_records ? `${count(nr.aggregate_records)} aggregate records` : "", nr.redacted_records ? `${count(nr.redacted_records)} redacted for privacy` : ""].filter(Boolean).join(", ")})` : ""}.</p>` : ""}`;
+        ${nr && nr.transactions ? `<p class="note">Not ranked: ${money(nr.amount_cents)} in ${count(nr.transactions)} transactions that are not one identifiable recipient${nr.aggregate_records || nr.redacted_records ? ` (${[nr.aggregate_records ? `${count(nr.aggregate_records)} aggregate records` : "", nr.redacted_records ? `${count(nr.redacted_records)} redacted for privacy` : ""].filter(Boolean).join(", ")})` : ""}.</p>` : ""}`;
     }).join("") + `<p class="note">Recipients are grouped by their federal entity ID, never by name.</p>`;
   }
   function reconciliationLines(code) {
@@ -324,9 +329,10 @@
   }
   function changesBlock(code) {
     const s = yearData().states[code], kd = yearData().kinds.contracts, c = s.changes;
-    if (!c || !kd || !kd.loaded || !kd.changes || !scopeKinds().includes("contracts")) return "";
+    // These counts are for all agencies and all contracts and IDVs, so they appear only for that selection or all spending.
+    if (!c || !kd || !kd.loaded || !kd.changes || state.agency || !["all", "contracts-all"].includes(state.scope)) return "";
     const meta = kd.changes;
-    return `<h3>Changed in Treasury's latest monthly contracts release</h3>
+    return `<h3>Changed in Treasury's latest monthly contracts release (all agencies, contracts and IDVs)</h3>
       <p class="note">The ${esc(meta.snapshot_date || "latest")} release added or updated ${count(c.added_or_updated_rows)} dated contract transactions in this state and year${c.flagged_correction_rows ? `, ${count(c.flagged_correction_rows)} of them flagged as corrections` : ""}. ${c.deobligation_rows ? `${count(c.deobligation_rows)} of these take money back (${money(c.deobligation_cents)}).` : ""} The file cannot separate new transactions from updated ones.</p>`;
   }
 
@@ -364,7 +370,7 @@
       ${share}
       ${sparkline(code)}
       ${scopeNotes(t)}
-      ${wholeKinds && deob ? `<p class="note">Includes ${money(deob)} taken back on earlier commitments.</p>` : ""}
+      ${wholeKinds && deob ? `<p class="note">Includes ${money(Math.abs(deob))} taken back on earlier commitments.</p>` : ""}
       ${categoryBars(t)}
       ${state.agency ? "" : `<h3>Awarding agencies</h3>${agencyBars(t, 6)}`}
       ${recipientList(code)}
@@ -385,7 +391,7 @@
     const items = [
       ["U.S. territories", territoryTotal, terr || "None recorded"],
       ["Outside the United States", agg.foreign.amount, "Work performed abroad, including Micronesia, the Marshall Islands and Palau (freely associated states, counted as foreign as Treasury does)"],
-      ["No location recorded", agg.unknown.amount, "Transactions with no usable place of performance in the record"],
+      ["Not assigned to a mapped place", agg.unknown.amount, "No usable place of performance in the record, or a state code that is not valid"],
     ];
     $("outside").innerHTML = items.map(([name, cents, detail]) => `
       <div class="item"><div class="label">${name}</div>
@@ -471,7 +477,14 @@
       const compared = (rec.agencies || []).filter((a) => a.gap_cents !== null);
       const off = compared.filter((a) => Math.abs(a.gap_cents) >= 100 * 1e6).sort((a, b) => Math.abs(b.gap_cents) - Math.abs(a.gap_cents));
       if (!compared.length) continue;
-      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Agency by agency over the same 51 places (${kindName}): ${off.length ? `${compared.length - off.length} of the ${compared.length} agencies compared are within $1 million of USAspending; the difference is in ${off.slice(0, 4).map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : `all ${compared.length} agencies compared are within $1 million of USAspending.`}${rec.agency_scope_note && rec.agency_scope_note.includes("left out") ? ` ${esc(rec.agency_scope_note)}.` : ""}</p>`);
+      const unanswered = Object.entries(rec.categories).filter(([, c]) => c.status === "no official figure returned").map(([c]) => d.categories[c].label);
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Agency by agency over the same 51 places (${kindName}${unanswered.length ? `, leaving out ${esc(unanswered.join(", ").toLowerCase())}, which has no published figure` : ""}): ${off.length ? `${compared.length - off.length} of the ${compared.length} agencies compared are within $1 million of USAspending; the difference is in ${off.slice(0, 4).map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : `all ${compared.length} agencies compared are within $1 million of USAspending.`}</p>`);
+    }
+    for (const item of d.disclosures || []) {
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p><strong>${esc(d.categories[item.category].label)}:</strong> ${esc(item.text)} <span class="note">Finding of ${esc(item.observed)}; evidence: ${esc(item.evidence)}.</span></p>`);
+    }
+    if ((d.historical_disclosures || []).length) {
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p class="note">Earlier findings recorded for a different snapshot or comparison of FY${d.fiscal_year} are kept in the repository (pipeline/disclosures.json); they do not describe the figures shown.</p>`);
     }
     const ck = d.kinds.contracts;
     const batches = ck.loaded ? (ck.deleted_key_batches || []).filter((b) => b.match === "twin" && Math.abs(b.state_contract_cents) >= 100 * 1e6 * 100) : [];
@@ -488,7 +501,9 @@
       const fips = k.unrecognised_state_fips && k.unrecognised_state_fips.length ? ` ${count(k.unrecognised_state_fips.reduce((s, f) => s + f.rows, 0))} rows carry a state code that is not a valid FIPS code and are counted as no location.` : "";
       const ch = k.changes;
       const undated = ch && ch.unknown_year_rows && ch.unknown_year_rows.length ? ` The ${esc(ch.source_file || "delta file")} has ${ch.unknown_year_rows.length} changed rows with no date or fiscal year: ${ch.unknown_year_rows.map((r) => `${esc(r.key)} (${esc(r.amount_raw || "no amount")}; ${esc(r.reason)}; ${esc(r.source_file)} row ${r.source_row})`).join("; ")}.` : "";
-      sources.push(`${kind === "contracts" ? "Contracts" : "Financial assistance"}: ${esc(k.source_zip)}, snapshot ${esc(k.snapshot_date)}, summarised ${esc(k.generated_at.slice(0, 10))}.${kept}${fips}${undated}`);
+      const p = k.provenance, repo = "https://github.com/mintyfizz/money-trail";
+      const links = p ? ` Original file preserved in <a href="${repo}/releases/tag/${encodeURIComponent(p.source_release)}">${esc(p.source_release)}</a>; typed data and results in <a href="${repo}/releases/tag/${encodeURIComponent(p.build_release)}">${esc(p.build_release)}</a>, built by commit <a href="${repo}/commit/${esc(p.code_commit)}">${esc(p.code_commit.slice(0, 7))}</a>${p.source_sha256 ? `; source SHA-256 ${esc(p.source_sha256)}` : ""}.` : " Release provenance not recorded for this file.";
+      sources.push(`${kind === "contracts" ? "Contracts" : "Financial assistance"}: ${esc(k.source_zip)}, snapshot ${esc(k.snapshot_date)}, summarised ${esc(k.generated_at.slice(0, 10))}.${links}${kept}${fips}${undated}`);
     }
     $("source").innerHTML = `Source: Treasury's national award archives for fiscal year ${d.fiscal_year}. ${sources.join(" ")}`;
   }
@@ -537,9 +552,15 @@
     if (v.scope !== "all") p.set("scope", v.scope);
     if (v.agency) p.set("agency", v.agency);
     if (v.state) p.set("state", v.state);
+    if (state.measure !== "total") p.set("measure", state.measure);
     return `#${p.toString()}`;
   }
-  function render() {
+  /* Intentional changes add a history entry; the first render, playback and back/forward replace it. */
+  function navigate(change) {
+    Object.assign(state, change);
+    render("push");
+  }
+  function render(mode = "replace") {
     measureControls();
     renderYearButtons();
     renderScopeSelect();
@@ -552,11 +573,12 @@
     renderCoverage();
     renderAbout();
     const hash = hashFor();
-    if (location.hash !== hash) history.replaceState(null, "", hash);
+    if (location.hash !== hash) {
+      if (mode === "push") history.pushState(null, "", hash); else history.replaceState(null, "", hash);
+    }
   }
   function select(code) {
-    state.selected = code;
-    render();
+    navigate({ selected: code });
     if (code && window.matchMedia("(max-width: 900px)").matches) $("panel").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   }
   function setYear(year) { state.year = year; render(); }
@@ -565,7 +587,7 @@
   function bind() {
     $("year-buttons").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-year]"); if (!b) return;
-      stopPlay(); setYear(+b.dataset.year);
+      stopPlay(); navigate({ year: +b.dataset.year });
     });
     $("play").addEventListener("click", () => {
       if (state.timer) return stopPlay();
@@ -573,11 +595,11 @@
       let i = 0; setYear(state.years[0]);
       state.timer = setInterval(() => { i += 1; if (i >= state.years.length) return stopPlay(); setYear(state.years[i]); }, 1600);
     });
-    $("scope").addEventListener("change", () => { state.scope = $("scope").value; render(); });
-    $("agency").addEventListener("change", () => { state.agency = $("agency").value || null; render(); });
+    $("scope").addEventListener("change", () => navigate({ scope: $("scope").value }));
+    $("agency").addEventListener("change", () => navigate({ agency: $("agency").value || null }));
     $("agency-search").addEventListener("input", renderAgencySelect);
     document.querySelectorAll('input[name="measure"]').forEach((input) =>
-      input.addEventListener("change", () => { state.measure = input.value; render(); }));
+      input.addEventListener("change", () => navigate({ measure: input.value })));
     document.querySelectorAll("#state-table th button").forEach((b) => b.addEventListener("click", () => {
       const key = b.dataset.sort;
       state.sort = { key, dir: state.sort.key === key ? -state.sort.dir : (key === "name" ? 1 : -1) };
@@ -596,8 +618,13 @@
     state.year = state.years.includes(fy) ? fy : state.years[state.years.length - 1];
     const scope = params.get("scope");
     state.scope = scope && SCOPES.some((s) => s.id === scope) ? scope : "all";
-    state.agency = params.get("agency") || null;
+    const agency = params.get("agency");
+    // An agency that appears in no loaded year is not a selection; ignore it rather than show a fake zero.
+    state.agency = agency && state.years.some((y) => yearData(y).agencies.some((a) => a.id === agency)) ? agency : null;
     state.selected = code && yearData().states[code] ? code : null;
+    state.measure = params.get("measure") === "per_resident" ? "per_resident" : "total";
+    const radio = document.querySelector(`input[name="measure"][value="${state.measure}"]`);
+    if (radio) radio.checked = true;
   }
 
   async function start() {
@@ -613,6 +640,7 @@
       bind();
       render();
       // Links, the back button and edited addresses all go through the same path.
+      window.addEventListener("popstate", () => { stopPlay(); readHash(); render(); });
       window.addEventListener("hashchange", () => { stopPlay(); readHash(); render(); });
     } catch (err) {
       $("lede").innerHTML = `<span class="error">The data files did not load (${esc(err.message)}). If you opened this page from disk, serve the folder over HTTP instead.</span>`;

@@ -176,7 +176,15 @@ jobs:
           YEAR: ${{ steps.req.outputs.year }}
         run: |
           tag="build-${SNAPSHOT_ID}-${GITHUB_SHA::7}"
-          files=(out/summary.json out/reconcile.json out/extract.json out/sha256-source.txt data/silver/part-*.parquet)
+          python - "$tag" <<'PY'
+          import json, os, sys
+          json.dump({"source_release": os.environ["SOURCE_TAG"], "build_release": sys.argv[1],
+                     "code_commit": os.environ["GITHUB_SHA"], "source_name": os.environ["NAME"],
+                     "source_sha256": os.environ["SHA"], "snapshot_id": os.environ["SNAPSHOT_ID"],
+                     "run": f'{os.environ["GITHUB_SERVER_URL"]}/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'},
+                    open("out/provenance.json", "w"), indent=1)
+          PY
+          files=(out/summary.json out/provenance.json out/reconcile.json out/extract.json out/sha256-source.txt data/silver/part-*.parquet)
           [ -f data/stale-rows.parquet ] && files+=(data/stale-rows.parquet)
           [ -f out/source.json ] && files+=(out/source.json)
           [ -f out/rebuild.json ] && files+=(out/rebuild.json)

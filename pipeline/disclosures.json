@@ -1,0 +1,35 @@
+{
+  "note": "Hand-written findings about specific source differences, each bound to the exact source file (SHA-256) and the exact comparison (our and the official 51-place totals) it was made against. A finding is shown as current only when both still match; otherwise it is listed as historical, about earlier figures. Nothing here changes a figure.",
+  "items": [
+    {
+      "fiscal_year": 2025,
+      "kind": "assistance",
+      "category": "loans",
+      "applies_to": {
+        "source_sha256": "3fdc799d852d66c0bf000f2071e71e4e7da8dec7ed12807c8f27a61febdcd428",
+        "comparison": {
+          "total_ours_cents": 34381644206,
+          "total_official_cents": 41956221625
+        }
+      },
+      "observed": "2026-11-18",
+      "text": "The loans check fails because of one agency. In every one of the 51 places, the whole difference between this archive and USAspending's live figure is Department of Veterans Affairs loan subsidy cost: $918,124,838.95 here against $993,870,613.14 live, a difference of \u2212$75,745,774.19. The archive is internally consistent: every row's subsidy cost matches Treasury's own generated amount. Whether VA revised these records after the 6 November snapshot, or the live site differs for another reason, is not established. The archive figures are shown as published.",
+      "evidence": "docs/evidence/fy2025-va-loans/ (request, response, receipt, state comparison, source cohorts SQL and result)"
+    },
+    {
+      "fiscal_year": 2025,
+      "kind": "contracts",
+      "category": "contracts",
+      "applies_to": {
+        "source_sha256": "ed67f1b2ed2ce5fce3543894c809e7d735418a8898d48183deacc6f1aa801e4b",
+        "comparison": {
+          "total_ours_cents": 78645611312390,
+          "total_official_cents": 77164651141778
+        }
+      },
+      "observed": "2026-11-18",
+      "text": "The contracts check fails, and the difference is concentrated in Department of Defense records that Treasury re-keyed in early November 2026: the archive holds both the old and the new copy of many of them (listed below). Decision 005 in the repository sets out what is proven and what is not. The archive figures are shown as published, with no correction.",
+      "evidence": "docs/decisions/005-national-typed-layer.md"
+    }
+  ]
+}
