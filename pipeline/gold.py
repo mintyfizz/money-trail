@@ -168,7 +168,7 @@ def place_of(kind_, state, territory):
 def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, source_zip: str, top: int = 10,
               deleted_keys: str | Path | None = None, stale_out: str | Path | None = None,
               reserve_gib: float = 8, apply_deleted_keys: bool = False, kind: str | Kind = "contracts",
-              categories: dict | None = None) -> dict:
+              categories: dict | None = None, deleted_keys_source: str | None = None) -> dict:
     """Summarise the snapshot as published. Keys listed as deleted in the same release's delta file
     are matched and reported for diagnosis, but only removed when `apply_deleted_keys` is set:
     removing them was tested against USAspending's published totals and did not reconcile."""
@@ -405,6 +405,7 @@ def summarise(silver_dir: str | Path, fiscal_year: int, snapshot_date: str, sour
         "agency_contracts_in_states": {n or "Not reported": cents(a) for n, a in agency_contracts},
         "deleted_key_matches": {"rows": stale[0], "cents": cents(stale[1]),
                                 "deleted_keys_listed": deleted_listed, "applied": apply_deleted_keys,
+                                "source_release": deleted_keys_source if deleted_keys else None,
                                 "meaning": ("Rows whose keys the same release's delta file lists as deleted. "
                                             "Reported for diagnosis; not removed unless applied.")},
         "deleted_key_batches": [
@@ -457,13 +458,14 @@ def main() -> None:
     parser.add_argument("--source-zip", required=True)
     parser.add_argument("--deleted-keys", help="Parquet of transaction keys the delta file deletes")
     parser.add_argument("--stale-out", help="write the rows matching deleted keys here for audit")
+    parser.add_argument("--deleted-keys-source", help="the release the deleted keys came from, recorded in the summary")
     parser.add_argument("--apply-deleted-keys", action="store_true",
                         help="remove matched rows (experimental; did not reconcile for FY2025)")
     parser.add_argument("--reserve-gib", type=float, default=8)
     args = parser.parse_args()
     result = summarise(args.silver_dir, args.year, args.snapshot_date, args.source_zip, kind=args.kind,
                        deleted_keys=args.deleted_keys, stale_out=args.stale_out, reserve_gib=args.reserve_gib,
-                       apply_deleted_keys=args.apply_deleted_keys)
+                       apply_deleted_keys=args.apply_deleted_keys, deleted_keys_source=args.deleted_keys_source)
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(result, indent=1))
     print(json.dumps({"kind": result["kind"], "national_cents": result["national"]["amount_cents"],

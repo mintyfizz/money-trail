@@ -248,10 +248,12 @@ class BuildTests(unittest.TestCase):
         out = self.summary_of([row("OLD_2", "440.00"), row("NEW_14", "440.00"), row("X", "10.00", state="TX")])
         deleted = self.root / "deleted.parquet"
         pq.write_table(pa.table({"contract_transaction_unique_key": ["OLD_2", "NOT_PRESENT"]}), deleted)
-        reported = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted)
+        reported = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted,
+                                  deleted_keys_source="build-delta-contracts-2026-11-06-47b4a4d")
         self.assertEqual(reported["states"]["CA"]["net_obligations_cents"], 88000)  # as published by default
         self.assertEqual(reported["deleted_key_matches"], {"rows": 1, "cents": 44000, "deleted_keys_listed": 2,
-                         "applied": False, "meaning": reported["deleted_key_matches"]["meaning"]})
+                         "applied": False, "source_release": "build-delta-contracts-2026-11-06-47b4a4d",
+                         "meaning": reported["deleted_key_matches"]["meaning"]})
         result = gold.summarise(out, 2025, "2026-11-06", "x.zip", deleted_keys=deleted, apply_deleted_keys=True)
         self.assertEqual(result["states"]["CA"]["net_obligations_cents"], 44000)
 

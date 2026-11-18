@@ -26,7 +26,7 @@ env:
 jobs:
   scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 120  # to be lowered to a measured bound after C2
     permissions:
       contents: write
     steps:
@@ -57,16 +57,13 @@ jobs:
         run: |
           python -m pipeline.source refresh --kind "$KIND" --year "$YEAR" > out/source.json
           cat out/source.json
-          read -r url name size date < <(python -c 'import json;d=json.load(open("out/source.json"));print(d["url"],d["file_name"],d["size"],d["snapshot_date"])')
+          read -r name size date < <(python -c 'import json;d=json.load(open("out/source.json"));print(d["file_name"],d["size"],d["snapshot_date"])')
           mkdir -p data/zip
           python -m pipeline.guard data --need "$size" --reserve-gib "$RESERVE_GIB"
-          for attempt in 1 2 3 4 5 6; do
-            if curl -fsS -L -C - --max-filesize "$size" --retry 5 --retry-delay 10 --retry-all-errors --connect-timeout 30 \
-                 --speed-limit 50000 --speed-time 60 -o "data/zip/$name" "$url"; then break; fi
-            echo "attempt $attempt stopped at $(stat -c %s "data/zip/$name" 2>/dev/null || echo 0) bytes"; sleep 20
-          done
-          test "$(stat -c %s "data/zip/$name")" -eq "$size"
-          unzip -tq "data/zip/$name"
+          # Resumable downloader: ranges pinned to the strong ETag, exact Content-Range, checksummed
+          # prefix checkpoint, reserve checked before every chunk, ZIP CRC verified at the end.
+          python -m pipeline.source download --record out/source.json --dir data/zip --reserve-gib "$RESERVE_GIB" | tee out/download.json
+          cp "data/zip/$name.receipt.json" out/download-receipt.json
           sha=$(sha256sum "data/zip/$name" | cut -d' ' -f1)
           echo "$sha  $name" > out/sha256-source.txt
           id=$(python -m pipeline.source id --kind "$KIND" --year "$YEAR" --snapshot-date "$date" "data/zip/$name")
@@ -113,7 +110,7 @@ jobs:
             --title "Source: ${NAME}, snapshot ${DATE}, SHA-256 ${SHA::12}" \
             --notes "Treasury's national file exactly as downloaded. Size ${SIZE} bytes, SHA-256 ${SHA}. If split, concatenate the parts in order (see the .parts.json manifest); the result must have this size and SHA-256. Recorded by code ${GITHUB_SHA}." \
             --manifest out/release-source.json --target "$GITHUB_SHA" --manifest-dir out \
-            "${split[@]}" "${whole[@]}" out/source.json out/sha256-source.txt
+            "${split[@]}" "${whole[@]}" out/source.json out/sha256-source.txt out/download-receipt.json
 
       - name: Rebuild — reproduce the preserved snapshot, verified, without Treasury
         if: steps.req.outputs.source == 'rebuild'
@@ -150,7 +147,18 @@ jobs:
           python -m pipeline.source fetch --repository "$GITHUB_REPOSITORY" --tag "$DTAG" --dir delta \
             --reserve-gib "$RESERVE_GIB" deleted-keys.parquet changes.json
           test "$(python -c 'import json;print(json.load(open("delta/changes.json"))["snapshot_date"])')" = "$DATE"
-          echo "DELETED_ARGS=--deleted-keys delta/deleted-keys.parquet --stale-out data/stale-rows.parquet" >> "$GITHUB_ENV"
+          # Keep the link explicit in the results: which release, which bytes.
+          cp delta/changes.json out/changes.json
+          python - <<'PY'
+          import json, os, hashlib
+          def sha(p): return hashlib.sha256(open(p, "rb").read()).hexdigest()
+          c = json.load(open("delta/changes.json"))
+          json.dump({"release": os.environ["DTAG"], "deleted_keys_sha256": sha("delta/deleted-keys.parquet"),
+                     "changes_sha256": sha("delta/changes.json"), "delta_source_file": c.get("source_file"),
+                     "snapshot_date": c.get("snapshot_date"), "used_as": "diagnostic only; no rows removed"},
+                    open("out/delta-provenance.json", "w"), indent=1)
+          PY
+          echo "DELETED_ARGS=--deleted-keys delta/deleted-keys.parquet --stale-out data/stale-rows.parquet --deleted-keys-source $DTAG" >> "$GITHUB_ENV"
 
       - name: Aggregates with blocking quality checks
         run: |
@@ -172,6 +180,7 @@ jobs:
           [ -f data/stale-rows.parquet ] && files+=(data/stale-rows.parquet)
           [ -f out/source.json ] && files+=(out/source.json)
           [ -f out/rebuild.json ] && files+=(out/rebuild.json)
+          [ -f out/changes.json ] && files+=(out/changes.json out/delta-provenance.json)
           for f in data/silver/part-*.parquet; do
             if [ "$(stat -c %s "$f")" -ge $((2 * 1024 * 1024 * 1024)) ]; then echo "typed part $f is over the asset limit"; exit 1; fi
           done

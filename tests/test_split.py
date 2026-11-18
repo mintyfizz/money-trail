@@ -156,7 +156,9 @@ class SplitTests(unittest.TestCase):
 
     def test_rebuild_uses_preserved_bytes_and_never_treasury(self):
         assets, opener = self.release_of(self.split_store())
-        with mock.patch.object(source, "head", side_effect=AssertionError("contacted Treasury")):
+        from ingest import archive
+        with mock.patch.object(archive, "head", side_effect=AssertionError("contacted Treasury")), \
+             mock.patch.object(archive, "download", side_effect=AssertionError("contacted Treasury")):
             result = source.rebuild("o/r", "t", self.original.name, self.root / "rebuilt", reserve_gib=0,
                                     assets=assets, opener=opener)
         self.assertEqual((self.root / "rebuilt" / self.original.name).read_bytes(), self.data)
@@ -233,6 +235,38 @@ class SplitTests(unittest.TestCase):
         assets[part] = dict(assets[part], digest="sha256:" + "0" * 64)
         with self.assertRaisesRegex(source.SnapshotError, "does not match the parts manifest"):
             source.rebuild("o/r", "t", self.original.name, self.root / "x", reserve_gib=0, assets=assets, opener=opener)
+
+    def test_refresh_records_http_identity_and_download_resumes(self):
+        from ingest import archive
+        from pipeline import fetch
+        files = [{"file_name": "FY2025_All_Assistance_Full_20261106.zip",
+                  "url": "https://files.usaspending.gov/award_data_archive/FY2025_All_Assistance_Full_20261106.zip"}]
+        http = {"bytes": 772, "etag": '"abc"', "last_modified": "Mon, 09 Nov 2026 00:00:00 GMT"}
+        with mock.patch.object(fetch, "monthly_files", return_value=files) as listing, \
+             mock.patch.object(archive, "head", return_value=http):
+            record = source.refresh("assistance", 2025)
+        listing.assert_called_once_with(2025, "assistance")
+        self.assertEqual((record["http"], record["size"]), (http, 772))
+        target = self.root / "zip" / record["file_name"]
+        calls = []
+
+        def flaky(rec, directory, reserve_gib, chunk_mib):
+            calls.append((rec["http"]["etag"], reserve_gib))
+            if len(calls) < 3:
+                raise archive.DownloadInterrupted("connection reset")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(self.data)
+            Path(str(target) + ".receipt.json").write_text(json.dumps(
+                {"bytes": 772, "sha256": hashlib.sha256(self.data).hexdigest(), "etag": '"abc"',
+                 "zip_crc_status": "verified"}))
+            return target
+        with mock.patch.object(archive, "download", side_effect=flaky):
+            result = source.download_source(record, self.root / "zip", reserve_gib=8, pause=0)
+        self.assertEqual(calls, [('"abc"', 8)] * 3)  # resumed twice, same pinned identity
+        self.assertEqual(result["sha256"], hashlib.sha256(self.data).hexdigest())
+        with mock.patch.object(archive, "download", side_effect=RuntimeError("Unsafe range response")):
+            with self.assertRaisesRegex(RuntimeError, "Unsafe"):
+                source.download_source(record, self.root / "zip2", pause=0)  # not retried
 
     def test_changed_bytes_get_a_new_snapshot_id(self):
         a = source.snapshot_id("assistance", 2021, "2026-11-06", hashlib.sha256(b"a").hexdigest())

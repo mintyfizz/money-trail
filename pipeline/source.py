@@ -1,8 +1,8 @@
 """Source snapshots: refresh (what Treasury publishes now) versus rebuild (an exact preserved snapshot).
 
-refresh  Lists the monthly files with an explicit type, picks the national file, and asks the server
-         for its size and Last-Modified. It returns a source record; it downloads nothing and
-         changes nothing. After download, `snapshot_id` names the snapshot by kind, year, snapshot
+refresh  Lists the monthly files with an explicit type, picks the national file, and records its
+         HTTP identity (size, strong ETag, Last-Modified). `download` then fetches it with the
+         project's resumable downloader, every range pinned to that ETag. After download, `snapshot_id` names the snapshot by kind, year, snapshot
          date and the first 12 hex digits of its SHA-256, so bytes that changed under the same file
          name get a new identifier and a new release. An existing release is never overwritten.
 
@@ -21,7 +21,6 @@ import json
 from pathlib import Path
 import subprocess
 from typing import Callable
-import urllib.request
 
 from pipeline.guard import GuardedFile, require
 from pipeline.release import asset_name
@@ -199,20 +198,38 @@ def rebuild(repository: str, tag: str, source_name: str, out_dir: Path, reserve_
     return result
 
 
-def head(url: str) -> dict:
-    request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "money-trail/1.0"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return {"size": int(response.headers["Content-Length"]),
-                "last_modified": response.headers.get("Last-Modified"), "final_url": response.geturl()}
-
-
 def refresh(kind: str, year: int, delta: bool = False) -> dict:
+    """The current national file and its HTTP identity (size, strong ETag, Last-Modified)."""
+    from ingest import archive
     from pipeline import fetch
     record = fetch.pick(fetch.monthly_files(year, kind), "Delta" if delta else "Full", kind)
-    record.update(head(record["url"]))
-    record.update({"fiscal_year": year, "mode": "refresh",
+    http = archive.head(record["url"])
+    record.update({"fiscal_year": year, "mode": "refresh", "http": http, "size": http["bytes"],
                    "note": "Upstream state now. The snapshot id is fixed only after download, from the bytes' SHA-256."})
     return record
+
+
+def download_source(record: dict, directory: Path, reserve_gib: float = 8, chunk_mib: float = 32,
+                    attempts: int = 30, pause: float = 10) -> dict:
+    """Download with the project's resumable downloader: byte ranges pinned to the strong ETag
+    (If-Match), exact Content-Range checks, a checksummed prefix checkpoint and a reserve check
+    before every chunk. An interruption resumes from the checkpoint; anything unsafe stops."""
+    import time
+    from ingest import archive
+    archive_record = {"file_name": record["file_name"], "url": record["url"], "http": record["http"],
+                      "updated_date": record["snapshot_date"]}
+    for attempt in range(1, attempts + 1):
+        try:
+            path = archive.download(archive_record, directory, reserve_gib=reserve_gib, chunk_mib=chunk_mib)
+            break
+        except archive.DownloadInterrupted as error:
+            if attempt == attempts:
+                raise
+            print(f"attempt {attempt}: {error}; resuming", flush=True)
+            time.sleep(pause)
+    receipt = json.loads(Path(str(path) + ".receipt.json").read_text())
+    return {"path": str(path), "size": receipt["bytes"], "sha256": receipt["sha256"], "etag": receipt["etag"],
+            "zip_crc_status": receipt["zip_crc_status"], "receipt": f"{path.name}.receipt.json"}
 
 
 def main() -> None:
@@ -235,6 +252,11 @@ def main() -> None:
     f.add_argument("--dir", required=True)
     f.add_argument("--reserve-gib", type=float, default=8)
     f.add_argument("assets", nargs="+")
+    d = sub.add_parser("download", help="resumable, ETag-pinned, reserve-checked download of a refresh record")
+    d.add_argument("--record", required=True)
+    d.add_argument("--dir", required=True)
+    d.add_argument("--reserve-gib", type=float, default=8)
+    d.add_argument("--chunk-mib", type=float, default=32)
     i = sub.add_parser("id", help="snapshot identifier for a downloaded file")
     i.add_argument("--kind", required=True)
     i.add_argument("--year", type=int, required=True)
@@ -246,6 +268,9 @@ def main() -> None:
     elif args.command == "rebuild":
         print(json.dumps(rebuild(args.repository, args.tag, args.source_name, Path(args.out_dir), args.reserve_gib,
                                  sha_asset=args.sha_asset)))
+    elif args.command == "download":
+        record = json.loads(Path(args.record).read_text())
+        print(json.dumps(download_source(record, Path(args.dir), args.reserve_gib, args.chunk_mib)))
     elif args.command == "fetch":
         assets = release_assets(args.repository, args.tag)
         for name in args.assets:
