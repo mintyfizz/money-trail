@@ -1,17 +1,48 @@
 {
- "generated_at": "2026-11-18T01:24:35+00:00",
+ "generated_at": "2026-11-18T02:44:08+00:00",
  "category_map_version": "2026-11-18",
  "years": [
   {
    "fiscal_year": 2021,
    "kinds": {
     "contracts": {
-     "loaded": false,
-     "reason": "Not loaded yet for this year"
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 68137562262749,
+     "provenance": {
+      "source_release": "build-fy2021-contracts-2026-11-06",
+      "build_release": "build-contracts-fy2021-2026-11-06-31c0767889c1-79c2bff",
+      "code_commit": "79c2bff5ffd1314bda82ac024c7bb535e98306f3",
+      "source_name": "FY2021_All_Contracts_Full_20261106.zip",
+      "source_sha256": "31c0767889c1968ec96330b093f11c9e814b628b880e658642c93d7eb3ff23bd",
+      "snapshot_id": "contracts-fy2021-2026-11-06-31c0767889c1",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44224599393"
+     },
+     "reconciliation": {
+      "contracts": "gaps",
+      "idvs": "no official figure returned"
+     }
     },
     "assistance": {
-     "loaded": false,
-     "reason": "Not loaded yet for this year"
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 466627497780082,
+     "provenance": {
+      "source_release": "source-assistance-fy2021-2026-11-06-18f3bcfedde3",
+      "build_release": "build-assistance-fy2021-2026-11-06-18f3bcfedde3-f05c34c",
+      "code_commit": "f05c34c3837124eb70cf04edf31bac9fb6652bef",
+      "source_name": "FY2021_All_Assistance_Full_20261106.zip",
+      "source_sha256": "18f3bcfedde33ee76bf6807c2f46c2e851e1f7533f283ee1ec0254f053046a1f",
+      "snapshot_id": "assistance-fy2021-2026-11-06-18f3bcfedde3",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44215930765"
+     },
+     "reconciliation": {
+      "grants": "passed",
+      "direct_payments": "passed",
+      "loans": "passed",
+      "other_assistance": "passed",
+      "not_specified": "no official figure returned"
+     }
     }
    }
   },
@@ -19,8 +50,22 @@
    "fiscal_year": 2022,
    "kinds": {
     "contracts": {
-     "loaded": false,
-     "reason": "Not loaded yet for this year"
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 72512145145056,
+     "provenance": {
+      "source_release": "build-fy2022-contracts-2026-11-06",
+      "build_release": "build-contracts-fy2022-2026-11-06-85b9aaad7a22-29e0898",
+      "code_commit": "29e089890614c563d8c08b2aa21aa75d478c4f2c",
+      "source_name": "FY2022_All_Contracts_Full_20261106.zip",
+      "source_sha256": "85b9aaad7a2270378ee8ff71d5644675a28ac354a22a8530ef4e1e158627ec87",
+      "snapshot_id": "contracts-fy2022-2026-11-06-85b9aaad7a22",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44222656814"
+     },
+     "reconciliation": {
+      "contracts": "gaps",
+      "idvs": "no official figure returned"
+     }
     },
     "assistance": {
      "loaded": true,
@@ -49,8 +94,22 @@
    "fiscal_year": 2023,
    "kinds": {
     "contracts": {
-     "loaded": false,
-     "reason": "Not loaded yet for this year"
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 80910887061213,
+     "provenance": {
+      "source_release": "build-fy2023-contracts-2026-11-06",
+      "build_release": "build-contracts-fy2023-2026-11-06-db2ae9ff2400-e8ef8a1",
+      "code_commit": "e8ef8a1bf15bed123d030708e9c02e532a750ec1",
+      "source_name": "FY2023_All_Contracts_Full_20261106.zip",
+      "source_sha256": "db2ae9ff240051385bb648798c2ffbc9b66df816473e6e3007fc5655d09ddf97",
+      "snapshot_id": "contracts-fy2023-2026-11-06-db2ae9ff2400",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44221650339"
+     },
+     "reconciliation": {
+      "contracts": "gaps",
+      "idvs": "no official figure returned"
+     }
     },
     "assistance": {
      "loaded": true,
@@ -79,8 +138,22 @@
    "fiscal_year": 2024,
    "kinds": {
     "contracts": {
-     "loaded": false,
-     "reason": "Not loaded yet for this year"
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 80269716580252,
+     "provenance": {
+      "source_release": "build-fy2024-contracts-2026-11-06",
+      "build_release": "build-contracts-fy2024-2026-11-06-fd3db584e4ad-34ba4da",
+      "code_commit": "34ba4daf96d08c696d258af26d1c0245d46deaa8",
+      "source_name": "FY2024_All_Contracts_Full_20261106.zip",
+      "source_sha256": "fd3db584e4adfc632640b0fdc6cb11beb5fa2e74f7c231e2a88f5a1e32b1e5df",
+      "snapshot_id": "contracts-fy2024-2026-11-06-fd3db584e4ad",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44219725130"
+     },
+     "reconciliation": {
+      "contracts": "gaps",
+      "idvs": "no official figure returned"
+     }
     },
     "assistance": {
      "loaded": true,
