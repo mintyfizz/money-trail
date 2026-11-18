@@ -35,6 +35,34 @@ To view the dashboard locally:
 python3 -m http.server 8765 --directory site
 ```
 
+### Reproduce
+
+Run one scope on GitHub: put one request on the `run/build-national` branch and push it. Refresh downloads Treasury's current file; rebuild reuses a preserved snapshot exactly.
+
+```json
+{"kind": "assistance", "year": 2024, "source": "refresh"}
+{"kind": "contracts", "year": 2025, "source": "rebuild",
+ "snapshot_tag": "build-fy2025-contracts-2026-11-06-47b4a4d",
+ "source_name": "FY2025_All_Contracts_Full_20261106.zip",
+ "deleted_keys_tag": "build-delta-contracts-2026-11-06-47b4a4d"}
+```
+
+Or by hand, with the authenticated GitHub CLI and at least the source size plus 8 GiB free:
+
+```sh
+# exact preserved source, verified part by part and as a whole; never contacts Treasury
+python -m pipeline.source rebuild --repository mintyfizz/money-trail \
+  --tag source-assistance-fy2024-2026-11-06-b9c4c62700a8 \
+  --source-name FY2024_All_Assistance_Full_20261106.zip --out-dir data/zip --sha-asset sha256-source.txt
+python -m pipeline.silver data/zip/FY2024_All_Assistance_Full_20261106.zip data/silver --kind assistance
+python -m pipeline.gold data/silver out/assistance-fy2024/summary.json --kind assistance --year 2024 \
+  --snapshot-date 2026-11-06 --source-zip FY2024_All_Assistance_Full_20261106.zip
+python -m pipeline.reconcile out/assistance-fy2024/summary.json out/assistance-fy2024/reconcile.json
+python -m pipeline.site_data out site/data   # one folder per scope: summary.json, reconcile.json, provenance.json
+```
+
+The national typed layer keeps the columns listed in `pipeline/kinds.py`, each with its raw text beside the typed value; the preserved original ZIP is the raw layer for everything else.
+
 ## The three questions
 
 1. **Where does it go?** Federal dollars into each state and county, by agency and award type, year by year.
