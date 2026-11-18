@@ -114,7 +114,7 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
                     "official_outside_states": rec.get("official_outside_states"),
                     "agency_status": rec.get("agency_status", "compared"),
                     "agency_scope_note": rec.get("agency_scope_note"),
-                    "agencies": [a for a in rec.get("agencies", []) if a["official_cents"] or a["ours_cents"]][:15]},
+                    "agencies": [a for a in rec.get("agencies", []) if a["official_cents"] or a["ours_cents"]]},
                 "changes": None if changes is None else {
                     "method": changes.get("method"), "meaning": changes.get("meaning"),
                     "unknown_year": changes.get("unknown_year_summary"),

@@ -216,7 +216,8 @@ def reconcile(summary: dict, categories: dict | None = None) -> dict:
     result["agency_categories"] = agency_categories
     result["agency_status"] = "compared"
     result["agency_scope_note"] = ("Agency comparison covers these categories only"
-                                   + (f"; left out because no official state figure was returned: {unanswered}"
+                                   + ("; left out because no official state figure was returned: "
+                                      + ", ".join(categories["categories"][n]["label"] for n in unanswered)
                                       if unanswered else ""))
     result["agencies"] = compare_agencies(ours, official_by_agency(year, codes))
     return result
