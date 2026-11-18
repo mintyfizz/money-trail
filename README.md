@@ -61,7 +61,7 @@ python -m pipeline.reconcile out/assistance-fy2024/summary.json out/assistance-f
 python -m pipeline.site_data out site/data   # one folder per scope: summary.json, reconcile.json, provenance.json
 ```
 
-The national typed layer keeps the columns listed in `pipeline/kinds.py`, each with its raw text beside the typed value; the preserved original ZIP is the raw layer for everything else.
+The national typed layer keeps only the columns listed in `pipeline/kinds.py`: money and dates are typed with their raw text kept beside them, the rest stay as text. It does not preserve every source column; the preserved original ZIP is the raw layer.
 
 ## The three questions
 
