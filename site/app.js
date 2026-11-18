@@ -65,6 +65,10 @@
   function perText(value) { return value === null ? "not available" : `${value < 0 ? "−" : ""}$${d3.format(",.0f")(Math.abs(value))}`; }
   function pct(x, digits = 1) { return `${d3.format(`.${digits}f`)(x * 100)}%`; }
   const count = d3.format(",");
+  function rankText(t) {
+    if (!t.tx && !t.amount) return "no awards in this selection";
+    return `${ordinal(t.rank)} of 51${t.tied ? " (tied)" : ""}`;
+  }
   function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
   function esc(text) { return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
   function titleCase(text) {
@@ -127,7 +131,12 @@
     const fillPlaces = () => {
       // Every one of the 51 places gets a value: no rows in scope is a known zero, because the scope is loaded.
       for (const code of Object.keys(d.states)) if (!out.places.has(code)) out.places.set(code, empty());
-      [...out.places.entries()].sort((x, y) => y[1].amount - x[1].amount).forEach(([, t], i) => { t.rank = i + 1; });
+      // Equal amounts share a rank (1, 2, 2, 4); ties are marked so no order is invented.
+      const sorted = [...out.places.values()].sort((x, y) => y.amount - x.amount);
+      sorted.forEach((t, i) => { t.rank = i > 0 && t.amount === sorted[i - 1].amount ? sorted[i - 1].rank : i + 1; });
+      const counts = new Map();
+      sorted.forEach((t) => counts.set(t.amount, (counts.get(t.amount) || 0) + 1));
+      sorted.forEach((t) => { t.tied = counts.get(t.amount) > 1; });
     };
     if (agencyIdx === -1) { fillPlaces(); state.cache.set(key, out); return out; }  // agency has no awards this year
     const add = (t, a, cat, amount, tx, missing, face) => {
@@ -198,7 +207,7 @@
     const agg = aggregate();
     paths.attr("aria-label", (f) => {
       const code = FIPS[f.id], s = yearData().states[code];
-      return agg ? `${s.name}: ${label(code)}, ${ordinal(agg.places.get(code).rank)} of 51` : `${s.name}: not loaded for this year`;
+      return agg ? `${s.name}: ${label(code)}, ${rankText(agg.places.get(code))}` : `${s.name}: not loaded for this year`;
     }).classed("selected", (f) => FIPS[f.id] === state.selected);
     const chosen = state.geo.states.find((f) => FIPS[f.id] === state.selected);
     d3.select("#selected-outline").attr("d", chosen ? state.geo.path(chosen) : null);
@@ -229,7 +238,7 @@
     let x, y;
     if (fromFocus) { const b = event.target.getBoundingClientRect(); x = b.left + b.width / 2 - wrap.left; y = b.top - wrap.top; }
     else { x = event.clientX - wrap.left; y = event.clientY - wrap.top; }
-    tip.innerHTML = `<strong>${esc(s.name)}</strong><br>${esc(label(code))}${agg ? `, ${ordinal(agg.places.get(code).rank)} of 51` : ""}`;
+    tip.innerHTML = `<strong>${esc(s.name)}</strong><br>${esc(label(code))}${agg ? `, ${rankText(agg.places.get(code))}` : ""}`;
     tip.style.left = `${Math.max(80, Math.min(x, box.width - 80))}px`;
     tip.style.top = `${y}px`;
     tip.hidden = false;
@@ -291,12 +300,15 @@
     return notes.map((n) => `<p class="note">${n}</p>`).join("");
   }
   function sparkline(code) {
-    const points = state.years.filter(comparable).map((y) => ({ y, v: amountOf(code, y) }))
-      .filter((p) => state.measure !== "per_resident" || yearData(p.y).states[code].population);  // no invented zeros
+    // code null = the national all-places total, always in dollars.
+    const national = code === null;
+    const points = state.years.filter(comparable)
+      .map((y) => ({ y, v: national ? aggregate(y).national.amount : amountOf(code, y) }))
+      .filter((p) => national || state.measure !== "per_resident" || yearData(p.y).states[code].population);  // no invented zeros
     if (points.length < 2) return "";
     const w = 260, h = 64, pad = 18;
     const x = d3.scalePoint().domain(points.map((p) => p.y)).range([pad, w - pad]);
-    const yv = points.map((p) => state.measure === "per_resident" ? perResident(p.v, yearData(p.y).states[code].population) : dollars(p.v));
+    const yv = points.map((p) => !national && state.measure === "per_resident" ? perResident(p.v, yearData(p.y).states[code].population) : dollars(p.v));
     const y = d3.scaleLinear().domain([Math.min(0, d3.min(yv)), d3.max(yv)]).nice().range([h - 16, 6]);
     const line = d3.line().x((p, i) => x(points[i].y)).y((p, i) => y(yv[i]));
     const current = points.findIndex((p) => p.y === state.year);
@@ -305,7 +317,7 @@
       ${current >= 0 ? `<circle cx="${x(state.year)}" cy="${y(yv[current])}" r="3.5"></circle>` : ""}
       <text x="${x(points[0].y)}" y="${h - 2}" text-anchor="middle">${points[0].y}</text>
       <text x="${x(points[points.length - 1].y)}" y="${h - 2}" text-anchor="middle">${points[points.length - 1].y}</text>
-    </svg>`;
+    </svg><p class="note">${points.map((p, i) => `FY${p.y} ${!national && state.measure === "per_resident" ? perText(yv[i]) + " per resident" : money(p.v)}`).join("; ")}. Years loaded for this same selection, nominal dollars.</p>`;
   }
   function recipientList(code) {
     const def = scopeDef(), s = yearData().states[code];
@@ -354,6 +366,7 @@
         <h2>United States</h2>
         <p class="state-figure figure${n.amount < 0 ? " negative" : ""}">${money(n.amount)}</p>
         <p class="facts">${count(n.tx)} transaction${n.tx === 1 ? "" : "s"}, fiscal year ${d.fiscal_year}, all places including those not on the map${state.agency ? `, ${esc(agencyName())} only` : ""}.</p>
+        ${sparkline(null)}
         ${scopeNotes(n)}
         ${categoryBars(n)}
         ${state.agency ? "" : `<h3>Largest agencies nationally</h3>${agencyBars(n)}`}
@@ -375,7 +388,7 @@
     panel.innerHTML = `
       <h2>${esc(s.name)}</h2>
       <p class="state-figure figure${t.amount < 0 ? " negative" : ""}">${money(t.amount)}</p>
-      <p class="facts">${ordinal(t.rank)} of 51${per === null ? "" : `, ${perText(per)} per resident`}${change === null ? "" : `, ${change >= 0 ? "up" : "down"} ${pct(Math.abs(change))} on ${state.year - 1}`}. ${count(t.tx)} transaction${t.tx === 1 ? "" : "s"}.</p>
+      <p class="facts">${rankText(t)}${per === null || !t.tx ? "" : `, ${perText(per)} per resident`}${change === null ? "" : `, ${change >= 0 ? "up" : "down"} ${pct(Math.abs(change))} on ${state.year - 1}`}. ${count(t.tx)} transaction${t.tx === 1 ? "" : "s"}.</p>
       ${share}
       ${sparkline(code)}
       ${scopeNotes(t)}
@@ -487,7 +500,7 @@
       const off = compared.filter((a) => Math.abs(a.gap_cents) >= 100 * 1e6).sort((a, b) => Math.abs(b.gap_cents) - Math.abs(a.gap_cents));
       if (!compared.length) continue;
       const unanswered = Object.entries(rec.categories).filter(([, c]) => c.status === "no official figure returned").map(([c]) => d.categories[c].label);
-      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Agency by agency over the same 51 places (${kindName}${unanswered.length ? `, leaving out ${esc(unanswered.join(", ").toLowerCase())}, which has no published figure` : ""}): ${off.length ? `${compared.length - off.length} of the ${compared.length} agencies compared are within $1 million of USAspending; the difference is in ${off.slice(0, 4).map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : `all ${compared.length} agencies compared are within $1 million of USAspending.`}</p>`);
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Agency by agency over the same 51 places (${kindName}${unanswered.length ? `, leaving out ${esc(unanswered.join(", ").toLowerCase())}, which has no published figure` : ""}): ${off.length ? `${compared.length - off.length} of the ${compared.length} agencies compared are within $1 million of USAspending. ${off.length > 4 ? "The largest differences are" : `The difference${off.length === 1 ? " is" : "s are"}`} in ${off.slice(0, 4).map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}${off.length > 4 ? `, and ${off.length - 4} more agencies differ by $1 million or more` : ""}.` : `All ${compared.length} agencies compared are within $1 million of USAspending.`}</p>`);
     }
     for (const item of d.disclosures || []) {
       $("reconciliation").insertAdjacentHTML("beforeend", `<p><strong>${esc(d.categories[item.category].label)}:</strong> ${esc(item.text)} <span class="note">Finding of ${esc(item.observed)}; evidence: ${esc(item.evidence)}.</span></p>`);
