@@ -40,6 +40,19 @@ def find_summaries(inputs: Path) -> list[tuple[dict, Path]]:
     return found
 
 
+def split_disclosures(items: list, year: int, kinds: dict, recs: dict) -> dict:
+    """A finding is current only if the loaded source is the same file (SHA-256) and the comparison
+    gives the same totals as when the finding was made. Anything else for this year is historical."""
+    current, historical = [], []
+    for item in (i for i in items if i["fiscal_year"] == year):
+        kind, want = kinds.get(item["kind"], {}), item["applies_to"]
+        rec = (recs.get(item["kind"]) or {}).get(item["category"]) or {}
+        same_source = kind.get("loaded") and (kind.get("provenance") or {}).get("source_sha256") == want["source_sha256"]
+        same_comparison = all(rec.get(k) == v for k, v in want["comparison"].items())
+        (current if same_source and same_comparison else historical).append(item)
+    return {"disclosures": current, "historical_disclosures": historical}
+
+
 def build(inputs: str | Path, output: str | Path, population: dict | None = None) -> dict:
     inputs, output = Path(inputs), Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -58,7 +71,7 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
     index_years = []
     for year in sorted(set(by_year) | set(TARGET_YEARS)):
         scopes = by_year.get(year, {})
-        agencies, agency_index, cells, kinds, states = [], {}, [], {}, {}
+        agencies, agency_index, cells, kinds, states, recs = [], {}, [], {}, {}, {}
         category_ids = list(categories["categories"])
         for code, name in STATES.items():
             states[code] = {"name": name, "population": (population or {}).get(code), "by_kind": {},
@@ -72,6 +85,7 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
             provenance_path = folder / "provenance.json"
             provenance = json.loads(provenance_path.read_text()) if provenance_path.exists() else None
             rec = json.loads(rec_path.read_text()) if rec_path.exists() else None
+            recs[kind] = rec
             changes = json.loads(changes_path.read_text()) if changes_path.exists() else None
             if summary.get("category_map_version") != categories["version"]:
                 raise SystemExit(f"FY{year} {kind} was built with category map "
@@ -132,7 +146,7 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
                      "cell_columns": ["agency", "place_kind", "place", "category", "amount_cents", "transactions",
                                       "rows_without_amount", "face_value_cents"],
                      "cells": cells, "states": states,
-                     "disclosures": [d for d in disclosures if d["fiscal_year"] == year and kinds[d["kind"]]["loaded"]]}
+                     **split_disclosures(disclosures, year, kinds, recs)}
         (output / f"fy{year}.json").write_text(json.dumps(year_file, separators=(",", ":")))
         index_years.append({"fiscal_year": year, "kinds": {
             k: ({"loaded": True, "snapshot_date": v["snapshot_date"], "amount_cents": v["national"]["amount_cents"],

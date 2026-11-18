@@ -82,3 +82,29 @@ class SiteDataTests(unittest.TestCase):
                 (root / "in" / name / "summary.json").write_text(json.dumps(summary))
             with self.assertRaises(SystemExit):
                 site_data.build(root / "in", root / "out")
+
+
+class DisclosureTests(unittest.TestCase):
+    item = {"fiscal_year": 2025, "kind": "assistance", "category": "loans", "observed": "2026-11-18",
+            "applies_to": {"source_sha256": "a" * 64, "comparison": {"total_ours_cents": 10, "total_official_cents": 12}},
+            "text": "The loans check fails because of one agency.", "evidence": "docs/evidence/x"}
+
+    def split(self, sha, ours, official):
+        kinds = {"assistance": {"loaded": True, "provenance": {"source_sha256": sha}}}
+        recs = {"assistance": {"loans": {"total_ours_cents": ours, "total_official_cents": official}}}
+        return site_data.split_disclosures([self.item], 2025, kinds, recs)
+
+    def test_current_only_for_the_same_source_and_comparison(self):
+        self.assertEqual(self.split("a" * 64, 10, 12)["disclosures"], [self.item])
+
+    def test_new_source_or_new_comparison_makes_it_historical(self):
+        for sha, ours, official in (("b" * 64, 10, 12), ("a" * 64, 10, 13), ("a" * 64, 11, 12)):
+            with self.subTest(sha=sha[0], ours=ours, official=official):
+                out = self.split(sha, ours, official)
+                self.assertEqual(out["disclosures"], [])
+                self.assertEqual(out["historical_disclosures"], [self.item])
+
+    def test_shipped_findings_match_the_shipped_data(self):
+        data = json.loads((Path(__file__).parents[1] / "site" / "data" / "fy2025.json").read_text())
+        self.assertEqual({(d["kind"], d["category"]) for d in data["disclosures"]},
+                         {("assistance", "loans"), ("contracts", "contracts")})

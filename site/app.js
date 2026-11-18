@@ -481,7 +481,10 @@
       $("reconciliation").insertAdjacentHTML("beforeend", `<p>Agency by agency over the same 51 places (${kindName}${unanswered.length ? `, leaving out ${esc(unanswered.join(", ").toLowerCase())}, which has no published figure` : ""}): ${off.length ? `${compared.length - off.length} of the ${compared.length} agencies compared are within $1 million of USAspending; the difference is in ${off.slice(0, 4).map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : `all ${compared.length} agencies compared are within $1 million of USAspending.`}</p>`);
     }
     for (const item of d.disclosures || []) {
-      $("reconciliation").insertAdjacentHTML("beforeend", `<p><strong>${esc(d.categories[item.category].label)}:</strong> ${esc(item.text)}</p>`);
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p><strong>${esc(d.categories[item.category].label)}:</strong> ${esc(item.text)} <span class="note">Finding of ${esc(item.observed)}; evidence: ${esc(item.evidence)}.</span></p>`);
+    }
+    if ((d.historical_disclosures || []).length) {
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p class="note">Earlier findings recorded for a different snapshot or comparison of FY${d.fiscal_year} are kept in the repository (pipeline/disclosures.json); they do not describe the figures shown.</p>`);
     }
     const ck = d.kinds.contracts;
     const batches = ck.loaded ? (ck.deleted_key_batches || []).filter((b) => b.match === "twin" && Math.abs(b.state_contract_cents) >= 100 * 1e6 * 100) : [];
