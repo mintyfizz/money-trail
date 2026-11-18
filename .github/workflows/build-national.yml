@@ -26,7 +26,7 @@ env:
 jobs:
   scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 120  # to be lowered to a measured bound after C2
+    timeout-minutes: 75  # FY2025 assistance took 15 min end to end; FY2021 (2.2x the CSV) is the largest scope
     permissions:
       contents: write
     steps:
