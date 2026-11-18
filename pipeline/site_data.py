@@ -25,6 +25,7 @@ from pipeline.kinds import load_categories
 
 KINDS = ("contracts", "assistance")
 NOT_LOADED = "Not loaded yet for this year"
+TARGET_YEARS = range(2021, 2026)  # every target year is listed, loaded or not
 
 
 def find_summaries(inputs: Path) -> list[tuple[dict, Path]]:
@@ -54,8 +55,8 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
         raise SystemExit("No summaries with a full agency matrix found")
 
     index_years = []
-    for year in sorted(by_year):
-        scopes = by_year[year]
+    for year in sorted(set(by_year) | set(TARGET_YEARS)):
+        scopes = by_year.get(year, {})
         agencies, agency_index, cells, kinds, states = [], {}, [], {}, {}
         category_ids = list(categories["categories"])
         for code, name in STATES.items():
@@ -67,6 +68,8 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
                 continue
             summary, folder = scopes[kind]
             rec_path, changes_path = folder / "reconcile.json", folder / "changes.json"
+            provenance_path = folder / "provenance.json"
+            provenance = json.loads(provenance_path.read_text()) if provenance_path.exists() else None
             rec = json.loads(rec_path.read_text()) if rec_path.exists() else None
             changes = json.loads(changes_path.read_text()) if changes_path.exists() else None
             if summary.get("category_map_version") != categories["version"]:
@@ -101,6 +104,7 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
                         states[code]["changes"] = c
             kinds[kind] = {
                 "loaded": True, "snapshot_date": summary["snapshot_date"], "source_zip": summary["source_zip"],
+                "provenance": provenance,
                 "generated_at": summary["generated_at"], "measure": summary["measure"], "scope": summary["scope"],
                 "national": {k: v for k, v in summary["national"].items() if k != "agencies"},
                 "checks": summary["checks"],
@@ -130,6 +134,7 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
         (output / f"fy{year}.json").write_text(json.dumps(year_file, separators=(",", ":")))
         index_years.append({"fiscal_year": year, "kinds": {
             k: ({"loaded": True, "snapshot_date": v["snapshot_date"], "amount_cents": v["national"]["amount_cents"],
+                 "provenance": v["provenance"],
                  "reconciliation": None if not v["reconciliation"] else
                  {c: p["status"] for c, p in v["reconciliation"]["categories"].items()}}
                 if v["loaded"] else v) for k, v in kinds.items()}})

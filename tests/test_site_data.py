@@ -46,11 +46,18 @@ class SiteDataTests(unittest.TestCase):
             for name, summary in scopes.items():
                 (root / "in" / name).mkdir(parents=True)
                 (root / "in" / name / "summary.json").write_text(json.dumps(summary))
+            (root / "in" / "scope-assistance-fy2025" / "provenance.json").write_text(json.dumps(
+                {"source_release": "source-a", "build_release": "build-a", "code_commit": "a" * 40}))
             index = site_data.build(root / "in", root / "out")
+            fy21 = json.loads((root / "out" / "fy2021.json").read_text())
             fy25 = json.loads((root / "out" / "fy2025.json").read_text())
             fy24 = json.loads((root / "out" / "fy2024.json").read_text())
-        self.assertEqual([y["fiscal_year"] for y in index["years"]], [2024, 2025])
-        self.assertEqual(index["years"][0]["kinds"]["assistance"], {"loaded": False, "reason": site_data.NOT_LOADED})
+        # Every target year is listed; years with nothing loaded say so rather than disappear.
+        self.assertEqual([y["fiscal_year"] for y in index["years"]], [2021, 2022, 2023, 2024, 2025])
+        self.assertEqual(index["years"][0]["kinds"]["contracts"], {"loaded": False, "reason": site_data.NOT_LOADED})
+        self.assertEqual(index["years"][3]["kinds"]["assistance"], {"loaded": False, "reason": site_data.NOT_LOADED})
+        self.assertEqual(fy21["cells"], [])
+        self.assertEqual(fy25["kinds"]["assistance"]["provenance"]["build_release"], "build-a")
         self.assertTrue(fy25["kinds"]["assistance"]["loaded"])
         self.assertFalse(fy24["kinds"]["assistance"]["loaded"])
         cols = fy25["cell_columns"]
