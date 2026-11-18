@@ -409,7 +409,7 @@
     const deob = scopeKinds().map((k) => s.by_kind[k]).filter(Boolean).reduce((sum, k) => sum + (k.deobligations_cents || 0), 0);
     panel.innerHTML = `
       <h2>${esc(s.name)}</h2>
-      <p class="state-figure figure${t.amount < 0 ? " negative" : ""}">${money(t.amount)}</p>
+      <p class="state-figure figure${t.amount < 0 ? " negative" : ""}">${state.measure === "per_resident" && per !== null ? `${perText(per)} <span class="unit">per resident</span>` : money(t.amount)}</p>
       <p class="facts">${rankText(code)}${state.measure === "per_resident" ? (t.tx ? `, ${money(t.amount)} in total` : "") : (per === null || !t.tx ? "" : `, ${perText(per)} per resident`)}${change === null ? "" : `, ${change >= 0 ? "up" : "down"} ${pct(Math.abs(change))} on ${state.year - 1}`}. ${count(t.tx)} transaction${t.tx === 1 ? "" : "s"}.</p>
       ${share}
       ${sparkline(code)}
