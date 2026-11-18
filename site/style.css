@@ -157,6 +157,7 @@ figcaption { display: flex; flex-wrap: wrap; align-items: start; justify-content
 .spark text { font: 400 11px var(--sans); fill: var(--ink-soft); }
 
 .note { font-size: var(--step--1); color: var(--ink-soft); margin: 0.5rem 0 0; }
+.note.sub { margin-top: 0.9rem; color: var(--red); }
 .check { font-size: var(--step--1); margin: 0.75rem 0 0; padding: 0.5rem 0.65rem; background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 3px; }
 .check p { margin: 0 0 0.3rem; }
 .check ul { margin: 0; padding-left: 1.1rem; }
