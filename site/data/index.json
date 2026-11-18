@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-18T01:05:07+00:00",
+ "generated_at": "2026-11-18T01:24:35+00:00",
  "category_map_version": "2026-11-18",
  "years": [
   {
@@ -23,8 +23,25 @@
      "reason": "Not loaded yet for this year"
     },
     "assistance": {
-     "loaded": false,
-     "reason": "Not loaded yet for this year"
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 391855738070720,
+     "provenance": {
+      "source_release": "source-assistance-fy2022-2026-11-06-3560476eb0df",
+      "build_release": "build-assistance-fy2022-2026-11-06-3560476eb0df-5838384",
+      "code_commit": "5838384c3058357785d4df54646367403ecd4d64",
+      "source_name": "FY2022_All_Assistance_Full_20261106.zip",
+      "source_sha256": "3560476eb0df4de8e9c112e50c0b6d530a5b2b97f5eaa2bee50abbad9ae89e33",
+      "snapshot_id": "assistance-fy2022-2026-11-06-3560476eb0df",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44213592741"
+     },
+     "reconciliation": {
+      "grants": "passed",
+      "direct_payments": "passed",
+      "loans": "passed",
+      "other_assistance": "passed",
+      "not_specified": "no official figure returned"
+     }
     }
    }
   },
