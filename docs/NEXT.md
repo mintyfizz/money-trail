@@ -1,14 +1,18 @@
 # Next work
 
-The national build now covers contracts and financial assistance for FY2021–2025, one scope per
-run, each preserved with its source and checked against USAspending (see the coverage table on the
-site and `site/data/index.json`). Nothing is merged or deployed: the work is on `build/fy-pilot`
-for review, and `main` is unchanged. PR #1 (milestone 1, per-agency ingestion) is earlier work.
+The national build covers contracts and financial assistance for FY2021–2025, one scope per run,
+each preserved with its source and checked against USAspending (see the coverage table on the site
+and `site/data/index.json`). It is merged into `main` (PR #2, with the follow-up PR #3) and the
+dashboard is public at https://money-trail-delta.vercel.app/, deployed by hand from `site/` at
+`94ce150` (see the Release section of the README). The repository and its releases stay private.
+PR #1 (milestone 1, per-agency ingestion) is earlier work.
 
 Open items, in the order they would matter to a reader:
 
-1. **Deployment proposal.** The site is a static folder. Publishing it (for example GitHub Pages)
-   changes who can see it and needs an explicit decision; it is not done here.
+1. **Deployment upkeep.** Deployment is manual: merging to `main` does not update the live site.
+   Each redeploy should publish the exact `site/` folder of a reviewed commit and repeat the public
+   checks (HTTP 200, file hashes, years and filters, mobile). Automatic Git deployment, a custom
+   domain or lazy loading of the year files are optional and need their own decision.
 2. **FY2025 loans difference.** All of it is Department of Veterans Affairs loan subsidy cost
    (−$75,745,774.19, equal in every state). A later snapshot of the FY2025 assistance file, built
    with `source: refresh`, would show whether VA revised the records; the old snapshot stays
