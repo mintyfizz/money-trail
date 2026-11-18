@@ -545,8 +545,9 @@
       const fips = k.unrecognised_state_fips && k.unrecognised_state_fips.length ? ` ${count(k.unrecognised_state_fips.reduce((s, f) => s + f.rows, 0))} rows carry a state code that is not a valid FIPS code and are counted as no location.` : "";
       const ch = k.changes;
       const undated = ch && ch.unknown_year_rows && ch.unknown_year_rows.length ? ` The ${esc(ch.source_file || "delta file")} has ${ch.unknown_year_rows.length} changed rows with no date or fiscal year: ${ch.unknown_year_rows.map((r) => `${esc(r.key)} (${esc(r.amount_raw || "no amount")}; ${esc(r.reason)}; ${esc(r.source_file)} row ${r.source_row})`).join("; ")}.` : "";
-      const p = k.provenance, repo = "https://github.com/mintyfizz/money-trail";
-      const links = p ? ` Original file preserved in <a href="${repo}/releases/tag/${encodeURIComponent(p.source_release)}">${esc(p.source_release)}</a>; typed data and results in <a href="${repo}/releases/tag/${encodeURIComponent(p.build_release)}">${esc(p.build_release)}</a>, built by commit <a href="${repo}/commit/${esc(p.code_commit)}">${esc(p.code_commit.slice(0, 7))}</a>${p.source_sha256 ? `; source SHA-256 ${esc(p.source_sha256)}` : ""}.` : " Release provenance not recorded for this file.";
+      // The repository is private, so its releases and commits are named as text, not linked.
+      const p = k.provenance;
+      const links = p ? ` Original file preserved in release ${esc(p.source_release)}; typed data and results in release ${esc(p.build_release)}, built by commit ${esc(p.code_commit)}${p.source_sha256 ? `; source SHA-256 ${esc(p.source_sha256)}` : ""}. These releases are kept in a private repository.` : " Release provenance not recorded for this file.";
       sources.push(`${kind === "contracts" ? "Contracts" : "Financial assistance"}: ${esc(k.source_zip)}, snapshot ${esc(k.snapshot_date)}, summarised ${esc(k.generated_at.slice(0, 10))}.${links}${kept}${fips}${undated}`);
     }
     $("source").innerHTML = `Source: Treasury's national award archives for fiscal year ${d.fiscal_year}. ${sources.join(" ")}`;
