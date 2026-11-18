@@ -129,6 +129,8 @@ CATEGORY = "https://api.usaspending.gov/api/v2/search/spending_by_category/award
 
 
 def official_by_agency(year: int, codes: list[str] | None = None, max_pages: int = 20) -> dict:
+    if codes is not None and not codes:
+        raise ValueError("No award type codes given; refusing to default to contracts")
     """Published totals by awarding agency for the given codes (default: contracts A-D), place of
     performance in the 50 states and DC: the same 51 places the state comparison uses. Every page
     is read, so no agency is cut off by the page size."""
@@ -136,7 +138,7 @@ def official_by_agency(year: int, codes: list[str] | None = None, max_pages: int
     totals = {}
     for page in range(1, max_pages + 1):
         body = {"spending_level": "transactions", "limit": 100, "page": page,
-                "filters": {"time_period": [fiscal_window(year)], "award_type_codes": codes or CONTRACT_CODES,
+                "filters": {"time_period": [fiscal_window(year)], "award_type_codes": CONTRACT_CODES if codes is None else codes,
                             "place_of_performance_locations": places}}
         response = post(CATEGORY, body)
         for r in response["results"]:
@@ -204,11 +206,18 @@ def reconcile(summary: dict, categories: dict | None = None) -> dict:
             result["population"] = {code: r.get("population") for code, r in official.items() if r.get("population")}
     agency_categories = ["contracts"] if kind == "contracts" else [n for n in names if n not in unanswered]
     codes = [code for n in agency_categories for code in categories["api_codes"][n]]
+    if not codes:
+        # Never fall back to another kind's codes: with nothing comparable, say so.
+        result.update(agency_categories=[], agencies=[], agency_status="unavailable",
+                      agency_scope_note="No category returned an official state figure; agency comparison not run")
+        return result
     ours = (ours_by_agency(summary, agency_categories) if "matrix" in summary
             else summary.get("agency_contracts_in_states", {}))
     result["agency_categories"] = agency_categories
+    result["agency_status"] = "compared"
     result["agency_scope_note"] = ("Agency comparison covers these categories only"
-                                   + (f"; left out because no official state figure was returned: {unanswered}"
+                                   + ("; left out because no official state figure was returned: "
+                                      + ", ".join(categories["categories"][n]["label"] for n in unanswered)
                                       if unanswered else ""))
     result["agencies"] = compare_agencies(ours, official_by_agency(year, codes))
     return result

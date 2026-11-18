@@ -354,7 +354,7 @@ class AssistanceReconcileTests(unittest.TestCase):
         self.assertEqual(result["not_specified"]["status"], "no official figure returned")
         self.assertEqual(result["not_specified"]["total_ours_cents"], 4000)
         self.assertTrue(any(codes == ("-1",) for _, codes, _ in calls))  # queried, not assumed empty
-        self.assertIn("not_specified", result["agency_scope_note"])
+        self.assertIn("Assistance type not specified", result["agency_scope_note"])
         agencies = {a["agency"]: a for a in result["agencies"]}
         self.assertEqual(agencies["Small Business Administration"]["gap_cents"], 0)  # second page was read
         self.assertNotIn("not_specified", result["agency_categories"])
@@ -383,3 +383,23 @@ class NotSpecifiedComparisonTests(unittest.TestCase):
         self.assertEqual(result["not_specified"]["official_rows_returned"], 51)
         self.assertIn("not_specified", result["agency_categories"])
         self.assertEqual(result["grants"]["status"], "no official figure returned")
+
+
+class AgencyComparisonUnavailableTests(unittest.TestCase):
+    def test_no_category_answered_means_no_agency_query_at_all(self):
+        from pipeline import gold, reconcile
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = gold.summarise(assistance_silver(tmp, ASSISTANCE_ROWS), 2025, "2026-11-06", "a.zip",
+                                     kind="assistance")
+        seen = []
+
+        def fake_post(url, body):
+            seen.append(body)
+            return {"results": []}
+        with mock.patch.object(reconcile, "post", fake_post):
+            result = reconcile.reconcile(summary)
+        self.assertEqual(result["agency_status"], "unavailable")
+        self.assertEqual(result["agencies"], [])
+        self.assertTrue(all("geo_layer" in body for body in seen))  # never queried contracts by accident
+        with self.assertRaises(ValueError):
+            reconcile.official_by_agency(2025, [])
