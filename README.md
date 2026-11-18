@@ -2,14 +2,19 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: national contracts and financial assistance, FY2021–2025, being loaded one scope at a time.** Each scope (one kind, one fiscal year) is built on a GitHub runner from Treasury's national archive, checked by blocking quality gates, compared category by category and agency by agency with USAspending's published state figures, and preserved with its source in verified releases. The [coverage table on the site](site/) and `site/data/index.json` say exactly what is loaded; anything not loaded is shown as not loaded, never as zero.
+**Status: the FY2021–FY2025 national contracts and assistance version is complete for review.** All ten scopes are loaded: **80,451,419 transactions** and **25,337 complete agency/place/category cells**, across all awarding agencies reported in the source archives. Every generated cell, source/build provenance record and preserved output was independently verified. Nothing is merged or publicly deployed.
 
-What the checks currently show:
+Each scope (one kind, one fiscal year) is built on a GitHub runner from Treasury's national archive, checked by blocking quality gates, compared category by category and agency by agency with USAspending's published state figures, and preserved with its source in verified releases. The [coverage table on the site](site/) and `site/data/index.json` say exactly what is loaded; anything not loaded is shown as not loaded, never as zero.
+
+The typed layer totals **6.43 GiB**, compared with **16.33 GiB** of preserved source ZIPs; the large originals stay in private GitHub releases. The 8 GiB free-space reserve remains enforced. [Verified sizes, run times, provenance and all comparison results](docs/measurements/national-fy2021-2025.md).
+
+What the checks show for the 6 November 2026 snapshots:
 
 - **FY2025 financial assistance:** grants and insurance/other match USAspending to the cent in all 51 places; direct payments pass (+$809,419.06, Arizona); loans fail by −$75,745,774.19, all of it Department of Veterans Affairs loan subsidy cost, equal in every state. The archive is internally consistent (every row matches Treasury's generated amount); whether VA revised records after the snapshot is not established. [Evidence](docs/evidence/fy2025-va-loans/).
-- **FY2024 financial assistance:** all four comparable categories pass (direct payments and other exact, loans within one cent, grants −0.0011%).
-- **FY2025 contracts:** the archive as published runs $14.81 billion (1.92%) above USAspending across the 50 states and DC, overwhelmingly in the Department of Defense, from transaction keys Treasury re-issued in early November 2026. See [decision 005](docs/decisions/005-national-typed-layer.md) for what is proven and what is not. Figures stay as Treasury published them.
-- Assistance type "not specified" (−1) is kept as its own group; USAspending returns no state figure for it, so it is shown unchecked.
+- **FY2021–FY2024 financial assistance:** all four comparable categories pass. FY2022 is exact in all 51 places for all four categories. FY2021 direct payments differ by −$135,922.50; FY2023 grants by −$4,645,000.00; FY2024 grants by −$12,444,870.00 and loans by −$0.01. All other comparable categories in those years are exact.
+- **FY2025 contracts:** the archive as published runs $14.81 billion (1.92%) above USAspending across the 50 states and DC, overwhelmingly in the Department of Defense. A specific batch of re-issued keys accounts for most of the difference; a net residual remains and exact award checks also reproduce disagreement with the live search API. See [decision 005](docs/decisions/005-national-typed-layer.md) for what is proven and what is not. Figures stay as Treasury published them.
+- **FY2021–FY2024 contracts:** the state/DC archive-minus-live differences are +$10,122,377,669.15, +$8,042,934,149.26, +$15,323,631,214.58 and +$11,274,995,284.68, respectively. These comparisons do not pass. The differences are reported without assuming the FY2025 explanation applies to earlier years; the original rows and totals are preserved.
+- Indefinite-delivery vehicles and assistance type "not specified" (−1) retain explicit unavailable-comparison status when USAspending supplies no state figures.
 
 How spending types, the loan measure, place and agencies are defined: [decision 006](docs/decisions/006-assistance-and-categories.md).
 
@@ -37,7 +42,7 @@ python3 -m http.server 8765 --directory site
 
 ### Reproduce
 
-**The published site** is built from ten scopes (contracts and financial assistance, FY2021–2025). Each scope's build release holds the small files the site needs: `summary.json`, `reconcile.json`, `provenance.json` (and `changes.json` for FY2025 contracts). Download those three or four assets for every scope into one folder per scope, then:
+**The committed dashboard** is built from ten scopes (contracts and financial assistance, FY2021–2025). Each scope's build release holds the small files the site needs: `summary.json`, `reconcile.json`, `provenance.json` (and `changes.json` for FY2025 contracts). Download those three or four assets for every scope into one folder per scope, then:
 
 ```sh
 # for each scope's build release (tags listed in site/data/index.json under provenance):

@@ -13,9 +13,12 @@ Open items, in the order they would matter to a reader:
    (−$75,745,774.19, equal in every state). A later snapshot of the FY2025 assistance file, built
    with `source: refresh`, would show whether VA revised the records; the old snapshot stays
    preserved and the disclosure stops showing as current once the source or comparison changes.
-3. **FY2025 contracts difference** ($14.81 billion, Defense re-keyed transactions): bounded and
-   documented in decision 005; no correction is applied. Revisit only with new evidence, such as a
-   later snapshot without the duplicate copies.
+3. **Contract source differences.** FY2021–FY2024 also differ from the live state/DC API by
+   $10.12B, $8.04B, $15.32B and $11.27B, respectively. Their causes were not investigated in this
+   expansion; see the [verified comparison table](measurements/national-fy2021-2025.md). The FY2025
+   $14.81B difference has bounded evidence in decision 005. No correction is applied and the
+   experimental deleted-key exclusion stays off. Revisit with new evidence, without assuming
+   one year's diagnostic explains another.
 4. **Earlier years.** FY2008–2020 use the same workflow (`pipeline/run_request.py` would need its
    year range widened). Older assistance archives may carry codes the category map lacks; the build
    stops on any unmapped code rather than guessing.
