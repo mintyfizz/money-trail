@@ -65,9 +65,31 @@
   function perText(value) { return value === null ? "not available" : `${value < 0 ? "−" : ""}$${d3.format(",.0f")(Math.abs(value))}`; }
   function pct(x, digits = 1) { return `${d3.format(`.${digits}f`)(x * 100)}%`; }
   const count = d3.format(",");
-  function rankText(t) {
+  /* Rank by the measure on display: total, or per resident among places with a population.
+     Equal values share a rank and are marked tied; a place without a value is not ranked. */
+  function rankOf(code) {
+    const agg = aggregate();
+    const key = `rank|${state.year}|${state.scope}|${state.agency}|${state.measure}`;
+    if (!state.cache.has(key)) {
+      const vals = Object.keys(yearData().states).map((c) => ({ c, v: value(c) })).filter((x) => x.v !== null)
+        .sort((a, b) => b.v - a.v);
+      const out = new Map(), counts = new Map();
+      vals.forEach((x) => counts.set(x.v, (counts.get(x.v) || 0) + 1));
+      vals.forEach((x, i) => {
+        const rank = i > 0 && x.v === vals[i - 1].v ? out.get(vals[i - 1].c).rank : i + 1;
+        out.set(x.c, { rank, tied: counts.get(x.v) > 1, of: vals.length });
+      });
+      state.cache.set(key, out);
+    }
+    return agg ? state.cache.get(key).get(code) || null : null;
+  }
+  function rankText(code) {
+    const t = aggregate().places.get(code);
     if (!t.tx && !t.amount) return "no awards in this selection";
-    return `${ordinal(t.rank)} of 51${t.tied ? " (tied)" : ""}`;
+    const r = rankOf(code);
+    if (!r) return "not ranked (no population figure)";
+    const by = state.measure === "per_resident" ? " per resident" : "";
+    return `${ordinal(r.rank)} of ${r.of}${by}${r.tied ? " (tied)" : ""}`;
   }
   function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
   function esc(text) { return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
@@ -207,7 +229,7 @@
     const agg = aggregate();
     paths.attr("aria-label", (f) => {
       const code = FIPS[f.id], s = yearData().states[code];
-      return agg ? `${s.name}: ${label(code)}, ${rankText(agg.places.get(code))}` : `${s.name}: not loaded for this year`;
+      return agg ? `${s.name}: ${label(code)}, ${rankText(code)}` : `${s.name}: not loaded for this year`;
     }).classed("selected", (f) => FIPS[f.id] === state.selected);
     const chosen = state.geo.states.find((f) => FIPS[f.id] === state.selected);
     d3.select("#selected-outline").attr("d", chosen ? state.geo.path(chosen) : null);
@@ -238,7 +260,7 @@
     let x, y;
     if (fromFocus) { const b = event.target.getBoundingClientRect(); x = b.left + b.width / 2 - wrap.left; y = b.top - wrap.top; }
     else { x = event.clientX - wrap.left; y = event.clientY - wrap.top; }
-    tip.innerHTML = `<strong>${esc(s.name)}</strong><br>${esc(label(code))}${agg ? `, ${rankText(agg.places.get(code))}` : ""}`;
+    tip.innerHTML = `<strong>${esc(s.name)}</strong><br>${esc(label(code))}${agg ? `, ${rankText(code)}` : ""}`;
     tip.style.left = `${Math.max(80, Math.min(x, box.width - 80))}px`;
     tip.style.top = `${y}px`;
     tip.hidden = false;
@@ -388,7 +410,7 @@
     panel.innerHTML = `
       <h2>${esc(s.name)}</h2>
       <p class="state-figure figure${t.amount < 0 ? " negative" : ""}">${money(t.amount)}</p>
-      <p class="facts">${rankText(t)}${per === null || !t.tx ? "" : `, ${perText(per)} per resident`}${change === null ? "" : `, ${change >= 0 ? "up" : "down"} ${pct(Math.abs(change))} on ${state.year - 1}`}. ${count(t.tx)} transaction${t.tx === 1 ? "" : "s"}.</p>
+      <p class="facts">${rankText(code)}${state.measure === "per_resident" ? (t.tx ? `, ${money(t.amount)} in total` : "") : (per === null || !t.tx ? "" : `, ${perText(per)} per resident`)}${change === null ? "" : `, ${change >= 0 ? "up" : "down"} ${pct(Math.abs(change))} on ${state.year - 1}`}. ${count(t.tx)} transaction${t.tx === 1 ? "" : "s"}.</p>
       ${share}
       ${sparkline(code)}
       ${scopeNotes(t)}

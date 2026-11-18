@@ -37,29 +37,44 @@ python3 -m http.server 8765 --directory site
 
 ### Reproduce
 
-Run one scope on GitHub: put one request on the `run/build-national` branch and push it. Refresh downloads Treasury's current file; rebuild reuses a preserved snapshot exactly.
+**The published site** is built from ten scopes (contracts and financial assistance, FY2021–2025). Each scope's build release holds the small files the site needs: `summary.json`, `reconcile.json`, `provenance.json` (and `changes.json` for FY2025 contracts). Download those three or four assets for every scope into one folder per scope, then:
+
+```sh
+python -m pipeline.site_data scopes/ site/data   # scopes/<kind>-fy<year>/{summary,reconcile,provenance}.json
+```
+
+With fewer than ten scopes the missing ones are written as not loaded, so build into a separate folder when experimenting rather than over `site/data`.
+
+**One scope on GitHub:** write one request (choose one of these forms) to `.github/run-request.json` on the `run/build-national` branch and push it. *Refresh* downloads Treasury's current file; *rebuild* reuses a preserved snapshot exactly.
 
 ```json
 {"kind": "assistance", "year": 2024, "source": "refresh"}
+```
+
+```json
 {"kind": "contracts", "year": 2025, "source": "rebuild",
  "snapshot_tag": "build-fy2025-contracts-2026-11-06-47b4a4d",
  "source_name": "FY2025_All_Contracts_Full_20261106.zip",
  "deleted_keys_tag": "build-delta-contracts-2026-11-06-47b4a4d"}
 ```
 
-Or by hand, with the authenticated GitHub CLI and at least the source size plus 8 GiB free:
+The workflow writes `provenance.json` itself (source and build releases, commit, source SHA-256, run URL).
+
+**One scope by hand**, with the authenticated GitHub CLI. Free space needed: the whole source file plus its largest part when the source is split (FY2021 assistance: 2.73 GB + 1.99 GB), plus the typed layer (about 0.45× the ZIP) and query spill, all above the 8 GiB reserve, which every step enforces.
 
 ```sh
 # exact preserved source, verified part by part and as a whole; never contacts Treasury
 python -m pipeline.source rebuild --repository mintyfizz/money-trail \
   --tag source-assistance-fy2024-2026-11-06-b9c4c62700a8 \
-  --source-name FY2024_All_Assistance_Full_20261106.zip --out-dir data/zip --sha-asset sha256-source.txt
-python -m pipeline.silver data/zip/FY2024_All_Assistance_Full_20261106.zip data/silver --kind assistance
-python -m pipeline.gold data/silver out/assistance-fy2024/summary.json --kind assistance --year 2024 \
+  --source-name FY2024_All_Assistance_Full_20261106.zip --out-dir demo/zip --sha-asset sha256-source.txt
+python -m pipeline.silver demo/zip/FY2024_All_Assistance_Full_20261106.zip demo/silver --kind assistance
+python -m pipeline.gold demo/silver demo/scopes/assistance-fy2024/summary.json --kind assistance --year 2024 \
   --snapshot-date 2026-11-06 --source-zip FY2024_All_Assistance_Full_20261106.zip
-python -m pipeline.reconcile out/assistance-fy2024/summary.json out/assistance-fy2024/reconcile.json
-python -m pipeline.site_data out site/data   # one folder per scope: summary.json, reconcile.json, provenance.json
+python -m pipeline.reconcile demo/scopes/assistance-fy2024/summary.json demo/scopes/assistance-fy2024/reconcile.json
+python -m pipeline.site_data demo/scopes demo/site-data
 ```
+
+A local build has no `provenance.json`; the page then says provenance was not recorded. Write your own (source release, your commit, source SHA-256) if you need it; never copy one from a different build.
 
 The national typed layer keeps only the columns listed in `pipeline/kinds.py`: money and dates are typed with their raw text kept beside them, the rest stay as text. It does not preserve every source column; the preserved original ZIP is the raw layer.
 
