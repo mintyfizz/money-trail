@@ -66,6 +66,15 @@ button { font: inherit; color: inherit; }
 .measure input { accent-color: var(--green-5); }
 .measure input:disabled + * , .measure label.disabled { color: var(--ink-soft); cursor: not-allowed; }
 
+.picker { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.4rem; }
+.picker select, .picker input {
+  font: inherit; font-size: 0.9375rem; color: var(--ink); background: var(--paper-raised);
+  border: 1px solid var(--ink-soft); border-radius: 3px; padding: 0.3rem 0.45rem; max-width: 22rem;
+}
+.picker input { width: 10rem; }
+.agency-picker .note { margin: 0; flex-basis: 100%; text-align: right; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 main { padding: 0 clamp(1rem, 4vw, 3rem) 3rem; }
 
 /* The one bold element: a sentence that carries the national figure, then the map. */
@@ -146,9 +155,14 @@ figcaption { display: flex; flex-wrap: wrap; align-items: start; justify-content
 
 .note { font-size: var(--step--1); color: var(--ink-soft); margin: 0.5rem 0 0; }
 .check { font-size: var(--step--1); margin: 0.75rem 0 0; padding: 0.5rem 0.65rem; background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 3px; }
+.check p { margin: 0 0 0.3rem; }
+.check ul { margin: 0; padding-left: 1.1rem; }
+table.coverage { min-width: 34rem; }
+table.coverage td { vertical-align: top; }
+table.coverage tbody tr { cursor: default; }
 
 /* Lower sections */
-section.outside, section.table-section, section.about { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); }
+section.outside, section.table-section, section.coverage-section, section.about { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); }
 section h2 { margin: 0; font: 600 var(--step-2)/1.2 var(--sans); }
 .section-intro { margin: 0.3rem 0 1rem; color: var(--ink-soft); max-width: 70ch; }
 

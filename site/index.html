@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Money Trail: where federal contract money goes</title>
-  <meta name="description" content="Federal contract obligations by state and fiscal year, from USAspending.gov, with the agencies and companies behind each total.">
+  <title>Money Trail: where federal money goes</title>
+  <meta name="description" content="Federal contracts, grants, loans and other spending by state and fiscal year, from USAspending.gov, with the agencies and recipients behind each total.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,13 +13,24 @@
   <header class="masthead">
     <div class="brand">
       <p class="wordmark">Money Trail</p>
-      <p class="tagline">Where federal contract money goes, state by state</p>
+      <p class="tagline">Where federal money goes, state by state</p>
     </div>
     <nav class="controls" aria-label="Map controls">
       <div class="years" role="group" aria-label="Fiscal year">
         <span class="control-name" id="year-label">Fiscal year</span>
         <div class="year-buttons" id="year-buttons" aria-labelledby="year-label"></div>
         <button type="button" class="play" id="play" aria-pressed="false">Play years</button>
+      </div>
+      <div class="picker">
+        <label class="control-name" for="scope">Spending type</label>
+        <select id="scope"></select>
+      </div>
+      <div class="picker agency-picker">
+        <label class="control-name" for="agency">Awarding agency</label>
+        <select id="agency" aria-describedby="agency-count"></select>
+        <label class="visually-hidden" for="agency-search">Filter the agency list</label>
+        <input type="search" id="agency-search" placeholder="Filter agencies" autocomplete="off">
+        <span class="note" id="agency-count" aria-live="polite"></span>
       </div>
       <div class="measure" role="radiogroup" aria-labelledby="measure-label">
         <span class="control-name" id="measure-label">Show</span>
@@ -30,7 +41,7 @@
   </header>
 
   <main>
-    <h1 class="lede" id="lede">Loading federal contract records…</h1>
+    <h1 class="lede" id="lede">Loading federal spending records…</h1>
     <p class="lede-sub" id="lede-sub"></p>
 
     <section class="atlas" aria-label="Map and state detail">
@@ -60,10 +71,10 @@
           <thead>
             <tr>
               <th scope="col"><button type="button" data-sort="name">State</button></th>
-              <th scope="col" class="num"><button type="button" data-sort="net">Net obligations</button></th>
+              <th scope="col" class="num"><button type="button" data-sort="amount" id="col-amount">Amount</button></th>
               <th scope="col" class="num"><button type="button" data-sort="per">Per resident</button></th>
               <th scope="col" class="num" data-col="change"><button type="button" data-sort="change">Change on prior year</button></th>
-              <th scope="col">Largest agency</th>
+              <th scope="col"><span id="col-agency">Largest agency</span></th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -71,13 +82,20 @@
       </div>
     </section>
 
+    <section class="coverage-section" aria-labelledby="coverage-title">
+      <h2 id="coverage-title">Coverage</h2>
+      <p class="section-intro">What is loaded for each fiscal year, from which Treasury snapshot, and how it compared with USAspending's published figures.</p>
+      <div class="table-scroll" id="coverage"></div>
+    </section>
+
     <section class="about" aria-labelledby="about-title">
       <h2 id="about-title">About these numbers</h2>
       <div class="about-columns">
         <div>
           <h3>What is counted</h3>
-          <p>Every prime contract transaction in Treasury's national archive for each fiscal year, including indefinite-delivery vehicles. The figure is <em>net obligations</em>: money agencies legally committed, minus money they took back. It is not money paid out.</p>
-          <p>Place means where the work is performed, not where the company is based. A Virginia contractor building a ship in Maine counts for Maine.</p>
+          <p>Every prime contract and financial assistance transaction in Treasury's national archives for each loaded fiscal year. The figure is <em>net obligations</em>: money agencies legally committed, minus money they took back. It is not money paid out. Loans are the exception: they count at their subsidy cost, the government's expected cost, as on USAspending; their face value is shown beside it and never added.</p>
+          <p>Place means where the work is performed or the money is used, not where the recipient is based. A Virginia contractor building a ship in Maine counts for Maine.</p>
+          <p>Agencies are the awarding agency. Spending types follow Treasury's award type codes; a type Treasury marks as not specified is kept as its own group.</p>
         </div>
         <div>
           <h3>Checked against the official site</h3>
@@ -87,7 +105,8 @@
           <h3>Limits</h3>
           <ul>
             <li>The Congressional Research Service, citing the Government Accountability Office, warns that the source data may be incomplete and inaccurate.</li>
-            <li>Grants, loans and other assistance are not included yet.</li>
+            <li>Recipient rankings exclude aggregate records, records redacted for privacy and transactions without a recipient ID; their total is shown beside the ranking.</li>
+            <li>Subawards are not included.</li>
             <li>Amounts are nominal dollars, not adjusted for inflation.</li>
             <li>Per-resident figures use the state populations USAspending publishes.</li>
           </ul>
