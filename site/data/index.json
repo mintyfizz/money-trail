@@ -1,11 +1,106 @@
 {
- "generated_at": "2026-11-17T13:35:45+00:00",
+ "generated_at": "2026-11-18T00:33:01+00:00",
+ "category_map_version": "2026-11-18",
  "years": [
   {
+   "fiscal_year": 2021,
+   "kinds": {
+    "contracts": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    },
+    "assistance": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    }
+   }
+  },
+  {
+   "fiscal_year": 2022,
+   "kinds": {
+    "contracts": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    },
+    "assistance": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    }
+   }
+  },
+  {
+   "fiscal_year": 2023,
+   "kinds": {
+    "contracts": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    },
+    "assistance": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    }
+   }
+  },
+  {
+   "fiscal_year": 2024,
+   "kinds": {
+    "contracts": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    },
+    "assistance": {
+     "loaded": false,
+     "reason": "Not loaded yet for this year"
+    }
+   }
+  },
+  {
    "fiscal_year": 2025,
-   "snapshot_date": "2026-11-06",
-   "net_obligations_cents": 84340714013753,
-   "reconciliation_status": "gaps"
+   "kinds": {
+    "contracts": {
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 84340714013753,
+     "provenance": {
+      "source_release": "build-fy2025-contracts-2026-11-06-47b4a4d",
+      "build_release": "build-contracts-fy2025-2026-11-06-ed67f1b2ed2c-3ca8006",
+      "code_commit": "3ca80065b7b6ebba612931473bf274efa7568374",
+      "source_name": "FY2025_All_Contracts_Full_20261106.zip",
+      "source_sha256": "ed67f1b2ed2ce5fce3543894c809e7d735418a8898d48183deacc6f1aa801e4b",
+      "snapshot_id": "contracts-fy2025-2026-11-06-ed67f1b2ed2c",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44207572323",
+      "deleted_keys_release": "build-delta-contracts-2026-11-06-47b4a4d",
+      "recorded": "after the run, from its releases (the workflow writes this file from the next run on)"
+     },
+     "reconciliation": {
+      "contracts": "gaps",
+      "idvs": "no official figure returned"
+     }
+    },
+    "assistance": {
+     "loaded": true,
+     "snapshot_date": "2026-11-06",
+     "amount_cents": 452282893617133,
+     "provenance": {
+      "source_release": "source-assistance-fy2025-2026-11-06-3fdc799d852d",
+      "build_release": "build-assistance-fy2025-2026-11-06-3fdc799d852d-9c18e57",
+      "code_commit": "9c18e572ad7573dcccd097bbe5f40178be0b2f52",
+      "source_name": "FY2025_All_Assistance_Full_20261106.zip",
+      "source_sha256": "3fdc799d852d66c0bf000f2071e71e4e7da8dec7ed12807c8f27a61febdcd428",
+      "snapshot_id": "assistance-fy2025-2026-11-06-3fdc799d852d",
+      "run": "https://github.com/mintyfizz/money-trail/actions/runs/44204890982",
+      "recorded": "after the run, from its releases (the workflow writes this file from the next run on)"
+     },
+     "reconciliation": {
+      "grants": "passed",
+      "direct_payments": "passed",
+      "loans": "gaps",
+      "other_assistance": "passed",
+      "not_specified": "no official figure returned"
+     }
+    }
+   }
   }
- ]
+ ],
+ "not_offered": "FY2008-2020 are a later stage and are not loaded."
 }

@@ -1,0 +1,19 @@
+{
+  "note": "Hand-written findings about specific source differences, each backed by saved evidence. Shown on the page for the year and kind they describe. Nothing here changes a figure.",
+  "items": [
+    {
+      "fiscal_year": 2025,
+      "kind": "assistance",
+      "category": "loans",
+      "text": "The loans check fails because of one agency. In every one of the 51 places, the whole difference between this archive and USAspending's live figure is Department of Veterans Affairs loan subsidy cost: $918,124,838.95 here against $993,870,613.14 live, a difference of \u2212$75,745,774.19. The archive is internally consistent: every row's subsidy cost matches Treasury's own generated amount. Whether VA revised these records after the 6 November snapshot, or the live site differs for another reason, is not established. The archive figures are shown as published.",
+      "evidence": "Independent VA-only state request and archive grouping, 18 November 2026 (review evidence assistance-fy2025-9c18e57/va-loans-state-*)."
+    },
+    {
+      "fiscal_year": 2025,
+      "kind": "contracts",
+      "category": "contracts",
+      "text": "The contracts check fails, and the difference is concentrated in Department of Defense records that Treasury re-keyed in early November 2026: the archive holds both the old and the new copy of many of them (listed below). Decision 005 in the repository sets out what is proven and what is not. The archive figures are shown as published, with no correction.",
+      "evidence": "docs/decisions/005-national-typed-layer.md"
+    }
+  ]
+}

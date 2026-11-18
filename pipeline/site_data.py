@@ -44,6 +44,7 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
     inputs, output = Path(inputs), Path(output)
     output.mkdir(parents=True, exist_ok=True)
     categories = load_categories()
+    disclosures = json.loads((Path(__file__).with_name("disclosures.json")).read_text())["items"]
     by_year: dict[int, dict[str, tuple[dict, Path]]] = {}
     for summary, folder in find_summaries(inputs):
         kind = summary.get("kind", "contracts")
@@ -130,7 +131,8 @@ def build(inputs: str | Path, output: str | Path, population: dict | None = None
                      "category_map_version": categories["version"], "kinds": kinds, "agencies": agencies,
                      "cell_columns": ["agency", "place_kind", "place", "category", "amount_cents", "transactions",
                                       "rows_without_amount", "face_value_cents"],
-                     "cells": cells, "states": states}
+                     "cells": cells, "states": states,
+                     "disclosures": [d for d in disclosures if d["fiscal_year"] == year and kinds[d["kind"]]["loaded"]]}
         (output / f"fy{year}.json").write_text(json.dumps(year_file, separators=(",", ":")))
         index_years.append({"fiscal_year": year, "kinds": {
             k: ({"loaded": True, "snapshot_date": v["snapshot_date"], "amount_cents": v["national"]["amount_cents"],

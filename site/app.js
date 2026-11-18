@@ -370,7 +370,7 @@
       ${share}
       ${sparkline(code)}
       ${scopeNotes(t)}
-      ${wholeKinds && deob ? `<p class="note">Includes ${money(deob)} taken back on earlier commitments.</p>` : ""}
+      ${wholeKinds && deob ? `<p class="note">Includes ${money(Math.abs(deob))} taken back on earlier commitments.</p>` : ""}
       ${categoryBars(t)}
       ${state.agency ? "" : `<h3>Awarding agencies</h3>${agencyBars(t, 6)}`}
       ${recipientList(code)}
@@ -477,7 +477,11 @@
       const compared = (rec.agencies || []).filter((a) => a.gap_cents !== null);
       const off = compared.filter((a) => Math.abs(a.gap_cents) >= 100 * 1e6).sort((a, b) => Math.abs(b.gap_cents) - Math.abs(a.gap_cents));
       if (!compared.length) continue;
-      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Agency by agency over the same 51 places (${kindName}): ${off.length ? `${compared.length - off.length} of the ${compared.length} agencies compared are within $1 million of USAspending; the difference is in ${off.slice(0, 4).map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : `all ${compared.length} agencies compared are within $1 million of USAspending.`}${rec.agency_scope_note && rec.agency_scope_note.includes("left out") ? ` ${esc(rec.agency_scope_note)}.` : ""}</p>`);
+      const unanswered = Object.entries(rec.categories).filter(([, c]) => c.status === "no official figure returned").map(([c]) => d.categories[c].label);
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p>Agency by agency over the same 51 places (${kindName}${unanswered.length ? `, leaving out ${esc(unanswered.join(", ").toLowerCase())}, which has no published figure` : ""}): ${off.length ? `${compared.length - off.length} of the ${compared.length} agencies compared are within $1 million of USAspending; the difference is in ${off.slice(0, 4).map((a) => `${esc(titleCase(a.agency))} (${money(a.gap_cents)})`).join(", ")}.` : `all ${compared.length} agencies compared are within $1 million of USAspending.`}</p>`);
+    }
+    for (const item of d.disclosures || []) {
+      $("reconciliation").insertAdjacentHTML("beforeend", `<p><strong>${esc(d.categories[item.category].label)}:</strong> ${esc(item.text)}</p>`);
     }
     const ck = d.kinds.contracts;
     const batches = ck.loaded ? (ck.deleted_key_batches || []).filter((b) => b.match === "twin" && Math.abs(b.state_contract_cents) >= 100 * 1e6 * 100) : [];
