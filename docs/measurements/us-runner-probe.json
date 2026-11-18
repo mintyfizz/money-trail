@@ -1,0 +1,17 @@
+{
+  "run_url": "https://github.com/mintyfizz/money-trail/actions/runs/44067660053",
+  "commit": "1cae01b20452f79da978b4659874abc676d5a85f",
+  "source_snapshot_date": "2026-11-06",
+  "source_url": "https://files.usaspending.gov/award_data_archive/FY2025_All_Contracts_Full_20261106.zip",
+  "runner_region": "westcentralus",
+  "source_bytes": 1833040425,
+  "download_seconds": 40,
+  "decimal_MB_per_second": 45.83,
+  "zip_crc_status": "verified",
+  "csv_members": 7,
+  "uncompressed_bytes": 14326204686,
+  "sha256": "ed67f1b2ed2ce5fce3543894c809e7d735418a8898d48183deacc6f1aa801e4b",
+  "raw_asset_retained": false,
+  "geographic_blocking_proven": false,
+  "scope": "Full national ZIP download and integrity only; no conversion or national reconciliation"
+}

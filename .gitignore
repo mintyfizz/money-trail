@@ -1,9 +1,12 @@
 # data never goes in the repo
 data/
+!/site/data/
 *.parquet
 *.csv
 *.zip
 *.gz
+*.partial
+*.part
 
 # python
 .venv/

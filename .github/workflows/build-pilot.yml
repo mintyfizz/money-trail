@@ -1,0 +1,192 @@
+name: Build national pilot
+
+# Heavy job: downloads national contracts archives on a GitHub runner, builds the typed transaction
+# layer, aggregates and reconciles. Starts only when the dedicated branch is pushed, or by hand.
+# FY2025 first. Earlier years are added only after FY2025 reconciles.
+on:
+  push:
+    branches: [run/build-pilot]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-national-pilot
+  cancel-in-progress: false
+
+env:
+  RESERVE_GIB: 8
+  YEARS: '2025'
+
+jobs:
+  delta:
+    # The monthly delta file from the same release lists keys Treasury deleted. Some still appear in
+    # that release's full file. They are matched and reported as a diagnostic, not removed: removing
+    # them did not reconcile with USAspending's published totals (decision 005).
+    # The delta ZIP and the deleted keys are preserved in their own verified release.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.preserve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --no-cache-dir -r requirements.txt
+      - name: Tests
+        run: python -m unittest discover -s tests
+      - name: Find, check space for, download and verify the delta file
+        run: |
+          python -m pipeline.fetch --year 2025 --delta > delta.json; cat delta.json
+          url=$(python -c 'import json;print(json.load(open("delta.json"))["url"])')
+          name=$(python -c 'import json;print(json.load(open("delta.json"))["file_name"])')
+          size=$(curl -fsSI -L "$url" | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v}')
+          test -n "$size"
+          mkdir -p data/zip out
+          python -m pipeline.guard data --need "$size" --reserve-gib "$RESERVE_GIB"
+          curl -fsS -L -C - --max-filesize "$size" --retry 5 --retry-delay 10 --retry-all-errors -o "data/zip/$name" "$url"
+          test "$(stat -c %s "data/zip/$name")" -eq "$size"
+          unzip -tq "data/zip/$name"
+          (cd data/zip && sha256sum "$name") > data/sha256-delta.txt
+          echo "name=$name" >> "$GITHUB_ENV"
+      - name: Typed delta, deleted keys and change summary
+        run: |
+          python -m pipeline.silver "data/zip/$name" data/delta --reserve-gib "$RESERVE_GIB"
+          python -m pipeline.changes deleted-keys data/delta out/deleted-keys.parquet
+          python -m pipeline.changes delta data/delta out/changes.json --years $YEARS
+          cp data/delta/_extract.json out/extract-delta.json
+          cp data/sha256-delta.txt out/sha256-delta.txt
+          cp delta.json out/source-delta.json
+          python - <<'PY'
+          import json
+          d = json.load(open("delta.json")); c = json.load(open("out/changes.json"))
+          c["source_file"], c["snapshot_date"] = d["file_name"], d["snapshot_date"]
+          json.dump(c, open("out/changes.json", "w"), indent=1)
+          PY
+      - name: Preserve the delta ZIP and deleted keys (draft, verify every digest, then publish)
+        id: preserve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          date=$(python -c 'import json;print(json.load(open("delta.json"))["snapshot_date"])')
+          tag="build-delta-contracts-${date}-${GITHUB_SHA::7}"
+          python -m pipeline.release --repository "$GITHUB_REPOSITORY" --tag "$tag" \
+            --title "Monthly contracts delta, snapshot ${date}, code ${GITHUB_SHA::7}" \
+            --notes "Treasury's delta file, the transaction keys it marks as deleted, and the change summary. The deleted keys are matched against the full files of the same date as a diagnostic only; no rows are removed from the published totals. Code: ${GITHUB_SHA}." \
+            --manifest out/release-delta.json --target "$GITHUB_SHA" \
+            "data/zip/$name" out/sha256-delta.txt out/deleted-keys.parquet out/extract-delta.json out/changes.json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: delta
+          path: out/
+          retention-days: 30
+
+  year:
+    needs: delta
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        year: [2025]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --no-cache-dir -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: delta
+          path: delta
+      - name: Find the national contracts file
+        id: find
+        run: |
+          python -m pipeline.fetch --year ${{ matrix.year }} > source.json
+          cat source.json
+          for k in url file_name snapshot_date; do
+            echo "$k=$(python -c "import json;print(json.load(open('source.json'))['$k'])")" >> "$GITHUB_OUTPUT"
+          done
+          # The deleted keys must come from the same monthly release as the full file.
+          test "$(python -c 'import json;print(json.load(open("source.json"))["snapshot_date"])')" = \
+               "$(python -c 'import json;print(json.load(open("delta/changes.json"))["snapshot_date"])')"
+      - name: Check space, download with resume, verify
+        env:
+          URL: ${{ steps.find.outputs.url }}
+          NAME: ${{ steps.find.outputs.file_name }}
+        run: |
+          size=$(curl -fsSI -L "$URL" | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v}')
+          test -n "$size"
+          mkdir -p data/zip
+          python -m pipeline.guard data --need "$size" --reserve-gib "$RESERVE_GIB"
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS -L -C - --max-filesize "$size" --retry 5 --retry-delay 10 --retry-all-errors --connect-timeout 30 \
+                 --speed-limit 50000 --speed-time 60 -o "data/zip/$NAME" "$URL"; then break; fi
+            echo "attempt $attempt stopped at $(stat -c %s "data/zip/$NAME" 2>/dev/null || echo 0) bytes"; sleep 20
+          done
+          test "$(stat -c %s "data/zip/$NAME")" -eq "$size"
+          unzip -tq "data/zip/$NAME"
+          (cd data/zip && sha256sum "$NAME") > data/sha256.txt
+      - name: Typed transaction layer (streamed from the ZIP, never extracted)
+        run: python -m pipeline.silver "data/zip/${{ steps.find.outputs.file_name }}" data/silver --reserve-gib "$RESERVE_GIB"
+      - name: Aggregates with blocking quality checks
+        run: |
+          mkdir -p out
+          python -m pipeline.gold data/silver out/fy${{ matrix.year }}.json --year ${{ matrix.year }} \
+            --snapshot-date ${{ steps.find.outputs.snapshot_date }} --source-zip "${{ steps.find.outputs.file_name }}" \
+            --deleted-keys delta/deleted-keys.parquet --stale-out data/stale-rows.parquet --reserve-gib "$RESERVE_GIB"
+          cp data/silver/_extract.json out/extract-fy${{ matrix.year }}.json
+          cp source.json out/source-fy${{ matrix.year }}.json
+          cp data/sha256.txt out/sha256-fy${{ matrix.year }}.txt
+      - name: Reconcile with USAspending's published totals
+        run: python -m pipeline.reconcile out/fy${{ matrix.year }}.json out/reconcile-fy${{ matrix.year }}.json
+      - name: Preserve the source ZIP and typed layer (draft, verify every digest, then publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.find.outputs.file_name }}
+          DATE: ${{ steps.find.outputs.snapshot_date }}
+          DELTA_TAG: ${{ needs.delta.outputs.tag }}
+        run: |
+          tag="build-fy${{ matrix.year }}-contracts-${DATE}-${GITHUB_SHA::7}"
+          keys_sha=$(sha256sum delta/deleted-keys.parquet | cut -d' ' -f1)
+          python -m pipeline.release --repository "$GITHUB_REPOSITORY" --tag "$tag" \
+            --title "FY${{ matrix.year }} national contracts, source snapshot ${DATE}, code ${GITHUB_SHA::7}" \
+            --notes "Original Treasury archive, the typed transaction layer built from it by commit ${GITHUB_SHA}, and stale-rows.parquet: rows whose keys the same release's delta lists as deleted (diagnostic only, not removed from the totals). Keys come from deleted-keys.parquet (sha256 ${keys_sha}) in release ${DELTA_TAG}." \
+            --manifest out/release-fy${{ matrix.year }}.json --target "$GITHUB_SHA" \
+            "data/zip/$NAME" data/sha256.txt data/silver/_extract.json data/stale-rows.parquet data/silver/part-*.parquet
+      - uses: actions/upload-artifact@v4
+        with:
+          name: summary-fy${{ matrix.year }}
+          path: out/
+          retention-days: 30
+
+  site-data:
+    needs: [delta, year]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          path: inputs
+      - run: python -m pipeline.site_data inputs site-data
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-data
+          path: site-data/
+          retention-days: 30

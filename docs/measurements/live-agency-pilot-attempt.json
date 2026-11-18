@@ -1,0 +1,91 @@
+{
+  "checked_at": "2026-11-17T08:23:49.690806+00:00",
+  "code_commit": "4b1a7071ca7ca5a0635d415dbda12e64fbd37f63",
+  "scope": "FY2025 contracts only; available per-agency archives, not national coverage",
+  "listed_agencies": 112,
+  "confirmed_archives": 17,
+  "catalog_complete": false,
+  "confirmed_compressed_bytes": 80361522,
+  "unresolved_agencies": 95,
+  "smallest_confirmed_archive": {
+    "fiscal_year": 2025,
+    "agency_name": "The Judicial Branch",
+    "agency_acronym": "JUD BRANCH",
+    "type": "contracts",
+    "updated_date": "2026-11-06",
+    "file_name": "FY2025_010_Contracts_Full_20261106.zip",
+    "url": "https://files.usaspending.gov/award_data_archive/FY2025_010_Contracts_Full_20261106.zip",
+    "agency_id": 8,
+    "http": {
+      "bytes": 2540,
+      "etag": "\"c85a08fa5b9695a8f5cc544968274cd6\"",
+      "last_modified": "Mon, 09 Nov 2026 07:03:48 GMT"
+    },
+    "discovered_at": "2026-11-17T08:17:27.888043+00:00",
+    "delta_files": []
+  },
+  "pilot": {
+    "started_at": "2026-11-17T08:19:27.255456+00:00",
+    "status": "interrupted",
+    "catalog_complete": false,
+    "national_coverage_verified": false,
+    "raw_zip_policy": "delete_after_independent_validation_except_pinned_fixture",
+    "files": [
+      {
+        "file_name": "FY2025_010_Contracts_Full_20261106.zip",
+        "phase": "download"
+      }
+    ],
+    "error": "Command '['curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '3', '--connect-timeout', '10', '--max-time', '30', '--head', '-H', 'Accept-Encoding: identity', 'https://files.usaspending.gov/award_data_archive/FY2025_010_Contracts_Full_20261106.zip']' returned non-zero exit status 52."
+  },
+  "range_probe": {
+    "at": "2026-11-17T08:22:43.562570+00:00",
+    "url": "https://files.usaspending.gov/award_data_archive/FY2025_010_Contracts_Full_20261106.zip",
+    "requested_range": "0-1023",
+    "expected_total_bytes": 2540,
+    "exit": 52,
+    "received_bytes": 0,
+    "stderr": "curl: (52) Empty reply from server\n",
+    "header_error": "No HTTP response headers received"
+  },
+  "other_connection_checks": [
+    {
+      "at": "2026-11-17T08:20:33.222243+00:00",
+      "flags": [],
+      "exit": 52,
+      "error": "curl: (52) Empty reply from server\n",
+      "header_error": "No HTTP response headers received"
+    },
+    {
+      "at": "2026-11-17T08:20:34.025825+00:00",
+      "flags": [
+        "--http1.1"
+      ],
+      "exit": 52,
+      "error": "curl: (52) Empty reply from server\n",
+      "header_error": "No HTTP response headers received"
+    },
+    {
+      "at": "2026-11-17T08:20:34.838159+00:00",
+      "flags": [
+        "--ipv4"
+      ],
+      "exit": 52,
+      "error": "curl: (52) Empty reply from server\n",
+      "header_error": "No HTTP response headers received"
+    }
+  ],
+  "alternate_client_check": {
+    "at": "2026-11-17T08:21:25.611737+00:00",
+    "client": "Python urllib standard TLS verification",
+    "error": "RemoteDisconnected('Remote end closed connection without response')"
+  },
+  "free_disk_bytes": 22044778496,
+  "reserve_bytes": 8589934592,
+  "real_fixture_pinned": false,
+  "real_zip_deleted": false,
+  "parquet_to_zip_ratio": null,
+  "whole_year_estimate": null,
+  "reason_estimate_unavailable": "No complete live agency conversion, and catalogue is incomplete",
+  "next_step": "Resume only unresolved agency IDs, then process the smallest complete archive and smallest nonempty agency to pin the fixture; keep large downloads paused"
+}

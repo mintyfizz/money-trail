@@ -1,0 +1,48 @@
+{
+  "version": "2026-11-18",
+  "sources": [
+    "https://api.usaspending.gov/api/v2/references/award_types/",
+    "https://github.com/fedspendingtransparency/usaspending-api/blob/master/usaspending_api/awards/v2/lookups/lookups.py",
+    "https://www.usaspending.gov/data/about-the-data-download.pdf"
+  ],
+  "categories": {
+    "contracts": {"label": "Contracts", "kind": "contracts",
+                  "measure": "net obligations (federal_action_obligation)"},
+    "idvs": {"label": "Indefinite-delivery vehicles", "kind": "contracts",
+             "measure": "net obligations (federal_action_obligation)"},
+    "grants": {"label": "Grants and cooperative agreements", "kind": "assistance",
+               "measure": "net obligations (federal_action_obligation)"},
+    "direct_payments": {"label": "Direct payments", "kind": "assistance",
+                        "measure": "net obligations (federal_action_obligation)"},
+    "loans": {"label": "Loans", "kind": "assistance",
+              "measure": "subsidy cost (original_loan_subsidy_cost); face value is reported separately and never added"},
+    "other_assistance": {"label": "Insurance and other assistance", "kind": "assistance",
+                         "measure": "net obligations (federal_action_obligation)"},
+    "not_specified": {"label": "Assistance type not specified", "kind": "assistance",
+                      "measure": "net obligations (federal_action_obligation)",
+                      "note": "Source code -1 ('Not Specified'): kept and disclosed, never assigned to another category"}
+  },
+  "codes": {
+    "contracts": {
+      "A": "contracts", "B": "contracts", "C": "contracts", "D": "contracts",
+      "IDV": "idvs"
+    },
+    "assistance": {
+      "02": "grants", "03": "grants", "04": "grants", "05": "grants", "F001": "grants", "F002": "grants",
+      "06": "direct_payments", "10": "direct_payments", "F006": "direct_payments", "F007": "direct_payments",
+      "07": "loans", "08": "loans", "F003": "loans", "F004": "loans",
+      "09": "other_assistance", "11": "other_assistance", "F005": "other_assistance",
+      "F008": "other_assistance", "F009": "other_assistance", "F010": "other_assistance",
+      "-1": "not_specified"
+    }
+  },
+  "api_codes": {
+    "contracts": ["A", "B", "C", "D"],
+    "idvs": ["IDV_A", "IDV_B", "IDV_B_A", "IDV_B_B", "IDV_B_C", "IDV_C", "IDV_D", "IDV_E"],
+    "grants": ["02", "03", "04", "05", "F001", "F002"],
+    "direct_payments": ["06", "10", "F006", "F007"],
+    "loans": ["07", "08", "F003", "F004"],
+    "other_assistance": ["09", "11", "F005", "F008", "F009", "F010"],
+    "not_specified": ["-1"]
+  }
+}

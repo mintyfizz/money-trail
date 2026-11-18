@@ -1,0 +1,205 @@
+name: Build national scope
+
+# One heavy scope per run: one kind (contracts or assistance) and one fiscal year, described by
+# .github/run-request.json on the run/build-national branch (see pipeline/run_request.py).
+# Runs only when that branch is pushed; one at a time, never cancelled, so scopes stay sequential.
+#
+# source "refresh": download Treasury's current national file, then preserve it in its own source
+#   release named by kind, year, snapshot date and SHA-256 prefix. If that release already exists
+#   the bytes are identical (same SHA prefix) and its manifest is checked instead; nothing is
+#   overwritten. Files at or above GitHub's asset limit are preserved as exact byte-range parts.
+# source "rebuild": reproduce a preserved snapshot from its release, verified, without Treasury.
+on:
+  push:
+    branches: [run/build-national]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-national
+  cancel-in-progress: false
+
+env:
+  RESERVE_GIB: 8
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75  # FY2025 assistance took 15 min end to end; FY2021 (2.2x the CSV) is the largest scope
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --no-cache-dir -r requirements.txt
+      - name: Tests
+        run: python -m unittest discover -s tests
+      - name: Read and validate the request
+        id: req
+        run: python -m pipeline.run_request .github/run-request.json --github-output "$GITHUB_OUTPUT"
+      - name: Make room (preinstalled toolchains this job never uses), then report space
+        run: |
+          df -B1 --output=avail,target /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -B1 --output=avail,target /
+          mkdir -p data out
+
+      - name: Refresh — find, check space for, download and verify the national file
+        if: steps.req.outputs.source == 'refresh'
+        env:
+          KIND: ${{ steps.req.outputs.kind }}
+          YEAR: ${{ steps.req.outputs.year }}
+        run: |
+          python -m pipeline.source refresh --kind "$KIND" --year "$YEAR" > out/source.json
+          cat out/source.json
+          read -r name size date < <(python -c 'import json;d=json.load(open("out/source.json"));print(d["file_name"],d["size"],d["snapshot_date"])')
+          mkdir -p data/zip
+          python -m pipeline.guard data --need "$size" --reserve-gib "$RESERVE_GIB"
+          # Resumable downloader: ranges pinned to the strong ETag, exact Content-Range, checksummed
+          # prefix checkpoint, reserve checked before every chunk, ZIP CRC verified at the end.
+          python -m pipeline.source download --record out/source.json --dir data/zip --reserve-gib "$RESERVE_GIB" > out/download.json
+          cp "data/zip/$name.receipt.json" out/download-receipt.json
+          sha=$(sha256sum "data/zip/$name" | cut -d' ' -f1)
+          echo "$sha  $name" > out/sha256-source.txt
+          id=$(python -m pipeline.source id --kind "$KIND" --year "$YEAR" --snapshot-date "$date" "data/zip/$name")
+          { echo "NAME=$name"; echo "SIZE=$size"; echo "SHA=$sha"; echo "SNAPSHOT_ID=$id"; echo "DATE=$date"; } >> "$GITHUB_ENV"
+
+      - name: Refresh — preserve the source snapshot (draft, verify every digest, publish), or confirm it exists
+        if: steps.req.outputs.source == 'refresh'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="source-${SNAPSHOT_ID}"
+          echo "SOURCE_TAG=$tag" >> "$GITHUB_ENV"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > existing.json 2>/dev/null; then
+            # Same kind, year, date and SHA prefix: check the preserved record matches these bytes exactly.
+            python - <<'PY'
+          import json, os
+          assets = {a["name"]: a for a in json.load(open("existing.json"))["assets"]}
+          from pipeline.release import asset_name
+          name, size, sha = os.environ["NAME"], int(os.environ["SIZE"]), os.environ["SHA"]
+          whole = assets.get(asset_name(name))
+          if whole:
+              assert whole["size"] == size and whole["digest"] == f"sha256:{sha}", "preserved file differs"
+          else:
+              manifest = asset_name(name) + ".parts.json"
+              assert manifest in assets, "release has neither the file nor a parts manifest"
+              from pipeline.source import fetch_asset, gh_asset_stream
+              repo = os.environ["GITHUB_REPOSITORY"]
+              path = fetch_asset(assets[manifest], "existing", lambda a: gh_asset_stream(repo, a),
+                                 float(os.environ["RESERVE_GIB"]))
+              m = json.load(open(path))
+              assert (m["size"], m["sha256"]) == (size, sha), "preserved parts manifest describes different bytes"
+              for part in m["parts"]:
+                  a = assets[part["name"]]
+                  assert a["size"] == part["size"] and a["digest"] == f"sha256:{part['sha256']}", part["name"]
+          print("already preserved; not uploaded again")
+          PY
+            echo "source release $tag already exists and matches" >> out/notes.txt
+            exit 0
+          fi
+          split=()
+          whole=()
+          if [ "$SIZE" -ge $((2 * 1024 * 1024 * 1024)) ]; then split=(--split "data/zip/$NAME"); else whole=("data/zip/$NAME"); fi
+          python -m pipeline.release --repository "$GITHUB_REPOSITORY" --tag "$tag" \
+            --title "Source: ${NAME}, snapshot ${DATE}, SHA-256 ${SHA::12}" \
+            --notes "Treasury's national file exactly as downloaded. Size ${SIZE} bytes, SHA-256 ${SHA}. If split, concatenate the parts in order (see the .parts.json manifest); the result must have this size and SHA-256. Recorded by code ${GITHUB_SHA}." \
+            --manifest out/release-source.json --target "$GITHUB_SHA" --manifest-dir out \
+            "${split[@]}" "${whole[@]}" out/source.json out/sha256-source.txt out/download-receipt.json
+
+      - name: Rebuild — reproduce the preserved snapshot, verified, without Treasury
+        if: steps.req.outputs.source == 'rebuild'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.req.outputs.snapshot_tag }}
+          NAME: ${{ steps.req.outputs.source_name }}
+          KIND: ${{ steps.req.outputs.kind }}
+          YEAR: ${{ steps.req.outputs.year }}
+        run: |
+          sha_asset=sha256.txt
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' > assets.txt
+          grep -qx "sha256-source.txt" assets.txt && sha_asset=sha256-source.txt
+          python -m pipeline.source rebuild --repository "$GITHUB_REPOSITORY" --tag "$TAG" --source-name "$NAME" \
+            --out-dir data/zip --reserve-gib "$RESERVE_GIB" --sha-asset "$sha_asset" | tee out/rebuild.json
+          unzip -tq "data/zip/$NAME"
+          sha=$(python -c 'import json;print(json.load(open("out/rebuild.json"))["sha256"])')
+          date=$(echo "$NAME" | sed -E 's/.*_([0-9]{4})([0-9]{2})([0-9]{2})\.zip/\1-\2-\3/')
+          echo "$sha  $NAME" > out/sha256-source.txt
+          id=$(python -c "from pipeline.source import snapshot_id;print(snapshot_id('$KIND',$YEAR,'$date','$sha'))")
+          { echo "NAME=$NAME"; echo "SHA=$sha"; echo "SNAPSHOT_ID=$id"; echo "DATE=$date"; echo "SOURCE_TAG=$TAG"; } >> "$GITHUB_ENV"
+
+      - name: Typed transaction layer (streamed from the ZIP, never extracted)
+        run: |
+          python -m pipeline.silver "data/zip/$NAME" data/silver --kind "${{ steps.req.outputs.kind }}" --reserve-gib "$RESERVE_GIB"
+          cp data/silver/_extract.json out/extract.json
+
+      - name: Deleted-key diagnostics (contracts, only if requested)
+        if: steps.req.outputs.deleted_keys_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DTAG: ${{ steps.req.outputs.deleted_keys_tag }}
+        run: |
+          python -m pipeline.source fetch --repository "$GITHUB_REPOSITORY" --tag "$DTAG" --dir delta \
+            --reserve-gib "$RESERVE_GIB" deleted-keys.parquet changes.json
+          test "$(python -c 'import json;print(json.load(open("delta/changes.json"))["snapshot_date"])')" = "$DATE"
+          # Keep the link explicit in the results: which release, which bytes.
+          cp delta/changes.json out/changes.json
+          python - <<'PY'
+          import json, os, hashlib
+          def sha(p): return hashlib.sha256(open(p, "rb").read()).hexdigest()
+          c = json.load(open("delta/changes.json"))
+          json.dump({"release": os.environ["DTAG"], "deleted_keys_sha256": sha("delta/deleted-keys.parquet"),
+                     "changes_sha256": sha("delta/changes.json"), "delta_source_file": c.get("source_file"),
+                     "snapshot_date": c.get("snapshot_date"), "used_as": "diagnostic only; no rows removed"},
+                    open("out/delta-provenance.json", "w"), indent=1)
+          PY
+          echo "DELETED_ARGS=--deleted-keys delta/deleted-keys.parquet --stale-out data/stale-rows.parquet --deleted-keys-source $DTAG" >> "$GITHUB_ENV"
+
+      - name: Aggregates with blocking quality checks
+        run: |
+          python -m pipeline.gold data/silver out/summary.json --kind "${{ steps.req.outputs.kind }}" \
+            --year "${{ steps.req.outputs.year }}" --snapshot-date "$DATE" --source-zip "$NAME" \
+            --reserve-gib "$RESERVE_GIB" ${DELETED_ARGS:-}
+
+      - name: Reconcile every category with USAspending's published totals
+        run: python -m pipeline.reconcile out/summary.json out/reconcile.json
+
+      - name: Preserve the typed layer and results (draft, verify every digest, then publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIND: ${{ steps.req.outputs.kind }}
+          YEAR: ${{ steps.req.outputs.year }}
+        run: |
+          tag="build-${SNAPSHOT_ID}-${GITHUB_SHA::7}"
+          python - "$tag" <<'PY'
+          import json, os, sys
+          json.dump({"source_release": os.environ["SOURCE_TAG"], "build_release": sys.argv[1],
+                     "code_commit": os.environ["GITHUB_SHA"], "source_name": os.environ["NAME"],
+                     "source_sha256": os.environ["SHA"], "snapshot_id": os.environ["SNAPSHOT_ID"],
+                     "run": f'{os.environ["GITHUB_SERVER_URL"]}/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'},
+                    open("out/provenance.json", "w"), indent=1)
+          PY
+          files=(out/summary.json out/provenance.json out/reconcile.json out/extract.json out/sha256-source.txt data/silver/part-*.parquet)
+          [ -f data/stale-rows.parquet ] && files+=(data/stale-rows.parquet)
+          [ -f out/source.json ] && files+=(out/source.json)
+          [ -f out/rebuild.json ] && files+=(out/rebuild.json)
+          [ -f out/changes.json ] && files+=(out/changes.json out/delta-provenance.json)
+          for f in data/silver/part-*.parquet; do
+            if [ "$(stat -c %s "$f")" -ge $((2 * 1024 * 1024 * 1024)) ]; then echo "typed part $f is over the asset limit"; exit 1; fi
+          done
+          python -m pipeline.release --repository "$GITHUB_REPOSITORY" --tag "$tag" \
+            --title "FY${YEAR} national ${KIND}: typed layer and results, snapshot ${DATE}, code ${GITHUB_SHA::7}" \
+            --notes "Built by commit ${GITHUB_SHA} from source ${NAME} (SHA-256 ${SHA}), preserved in release ${SOURCE_TAG}." \
+            --manifest out/release-build.json --target "$GITHUB_SHA" "${files[@]}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scope-${{ steps.req.outputs.kind }}-fy${{ steps.req.outputs.year }}
+          path: out/
+          retention-days: 30

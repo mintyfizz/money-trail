@@ -1,0 +1,59 @@
+{
+  "api": "https://api.usaspending.gov/api/v2/bulk_download/list_monthly_files/",
+  "retrieved_at": "2026-11-17T06:35:38.057384+00:00",
+  "agency": "all",
+  "files": [
+    {
+      "fiscal_year": 2025,
+      "agency_name": "All",
+      "agency_acronym": null,
+      "type": "contracts",
+      "updated_date": "2026-11-06",
+      "file_name": "FY2025_All_Contracts_Full_20261106.zip",
+      "url": "https://files.usaspending.gov/award_data_archive/FY2025_All_Contracts_Full_20261106.zip",
+      "http": {
+        "bytes": 1833040425,
+        "etag": "\"8537efe335efdb579b63f7ccbedca6cc-219\"",
+        "last_modified": "Mon, 09 Nov 2026 07:04:02 GMT"
+      },
+      "discovered_at": "2026-11-17T06:35:36.231797+00:00",
+      "delta_files": [
+        {
+          "fiscal_year": null,
+          "agency_name": "All",
+          "agency_acronym": null,
+          "type": "contracts",
+          "updated_date": "2026-11-06",
+          "file_name": "FY(All)_All_Contracts_Delta_20261106.zip",
+          "url": "https://files.usaspending.gov/award_data_archive/FY(All)_All_Contracts_Delta_20261106.zip"
+        }
+      ]
+    },
+    {
+      "fiscal_year": 2025,
+      "agency_name": "All",
+      "agency_acronym": null,
+      "type": "assistance",
+      "updated_date": "2026-11-06",
+      "file_name": "FY2025_All_Assistance_Full_20261106.zip",
+      "url": "https://files.usaspending.gov/award_data_archive/FY2025_All_Assistance_Full_20261106.zip",
+      "http": {
+        "bytes": 1412581622,
+        "etag": "\"2630d6395813f9c0eb20caa09783477a-169\"",
+        "last_modified": "Mon, 09 Nov 2026 07:04:02 GMT"
+      },
+      "discovered_at": "2026-11-17T06:35:38.057294+00:00",
+      "delta_files": [
+        {
+          "fiscal_year": null,
+          "agency_name": "All",
+          "agency_acronym": null,
+          "type": "assistance",
+          "updated_date": "2026-11-06",
+          "file_name": "FY(All)_All_Assistance_Delta_20261106.zip",
+          "url": "https://files.usaspending.gov/award_data_archive/FY(All)_All_Assistance_Delta_20261106.zip"
+        }
+      ]
+    }
+  ]
+}

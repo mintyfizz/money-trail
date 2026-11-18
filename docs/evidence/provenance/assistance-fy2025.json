@@ -1,0 +1,10 @@
+{
+ "source_release": "source-assistance-fy2025-2026-11-06-3fdc799d852d",
+ "build_release": "build-assistance-fy2025-2026-11-06-3fdc799d852d-9c18e57",
+ "code_commit": "9c18e572ad7573dcccd097bbe5f40178be0b2f52",
+ "source_name": "FY2025_All_Assistance_Full_20261106.zip",
+ "source_sha256": "3fdc799d852d66c0bf000f2071e71e4e7da8dec7ed12807c8f27a61febdcd428",
+ "snapshot_id": "assistance-fy2025-2026-11-06-3fdc799d852d",
+ "run": "https://github.com/mintyfizz/money-trail/actions/runs/44204890982",
+ "recorded": "after the run, from its releases (the workflow writes this file from the next run on)"
+}
