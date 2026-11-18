@@ -93,7 +93,11 @@ def connect(silver_dir: str | Path, deleted_keys: str | Path | None = None,
         loan_measure = None
     else:
         raw_fips = "trim(coalesce(prime_award_transaction_place_of_performance_state_fips_code, ''))"
-        fips = f"CASE WHEN {raw_fips} = '' THEN '' ELSE lpad({raw_fips}, 2, '0') END"
+        # Only a 1- or 2-digit numeric code is a FIPS code; a 1-digit one is padded. Anything else is
+        # kept as written, so it matches no state and is listed as unrecognised (never truncated).
+        fips = (f"CASE WHEN {raw_fips} = '' THEN '' "
+                f"WHEN regexp_full_match({raw_fips}, '[0-9]') THEN '0' || {raw_fips} "
+                f"ELSE {raw_fips} END")
         state = sql_map("fips", STATE_FIPS, default="CASE WHEN fips = '' THEN '' ELSE NULL END")
         code = "trim(coalesce(assistance_type_code, ''))"
         record_type = "trim(coalesce(record_type_code, ''))"

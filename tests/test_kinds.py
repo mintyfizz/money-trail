@@ -238,6 +238,15 @@ class AssistanceGoldTests(unittest.TestCase):
         self.assertEqual(r["national"]["amount_cents"], 1000)
         self.assertEqual(r["states"]["CA"]["categories"][0]["rows_without_amount"], 1)
 
+    def test_malformed_fips_is_never_truncated_into_a_state(self):
+        r = self.summary([assistance_row("F3", "100.00", fips="060"), assistance_row("F4", "200.00", fips="01junk"),
+                          assistance_row("F5", "5.00", fips="6A"), assistance_row("F6", "1.00", fips=" 06 ")])
+        self.assertEqual(r["checks"]["unrecognised_state_fips_rows"], 3)
+        self.assertEqual({x["fips"] for x in r["unrecognised_state_fips"]}, {"060", "01junk", "6A"})
+        self.assertNotIn("AL", r["states"])
+        self.assertEqual(r["states"]["CA"]["amount_cents"], 100)  # only the padded-by-whitespace valid code
+        self.assertEqual(r["outside_map"]["unknown_cents"], 30500)
+
     def test_unknown_fips_goes_to_unknown_and_is_listed(self):
         r = self.summary([assistance_row("F1", "7.00", fips="99"), assistance_row("F2", "3.00", fips="6")])
         self.assertEqual(r["checks"]["unrecognised_state_fips_rows"], 1)
@@ -329,6 +338,8 @@ class AssistanceReconcileTests(unittest.TestCase):
                                     {"shape_code": "PR", "aggregated_amount": 5.00},
                                     {"shape_code": "", "aggregated_amount": 7.00}]
                         + [{"shape_code": c, "aggregated_amount": 0} for c in gold.STATES if c not in ("CA", "TX")]}
+            if codes == data["api_codes"]["loans"]:
+                return {"results": [{"shape_code": "CA", "aggregated_amount": 1234.56}]}
             return {"results": []}
 
         with mock.patch.object(reconcile, "post", fake_post):
@@ -340,9 +351,35 @@ class AssistanceReconcileTests(unittest.TestCase):
         self.assertEqual(grants["TX"]["gap_cents"], 0)
         self.assertEqual(result["official_outside_states"]["grants"], {"PR": 500, "(blank)": 700})
         self.assertEqual(result["grants"]["total_official_cents"], 94975)  # PR and blank never enter
-        self.assertEqual(result["not_specified"]["status"], "no official figure")
+        self.assertEqual(result["not_specified"]["status"], "no official figure returned")
         self.assertEqual(result["not_specified"]["total_ours_cents"], 4000)
-        self.assertFalse(any(codes == ("-1",) for _, codes, _ in calls))
+        self.assertTrue(any(codes == ("-1",) for _, codes, _ in calls))  # queried, not assumed empty
+        self.assertIn("not_specified", result["agency_scope_note"])
         agencies = {a["agency"]: a for a in result["agencies"]}
         self.assertEqual(agencies["Small Business Administration"]["gap_cents"], 0)  # second page was read
         self.assertNotIn("not_specified", result["agency_categories"])
+
+
+class NotSpecifiedComparisonTests(unittest.TestCase):
+    def test_minus_one_is_compared_when_the_api_returns_figures(self):
+        from pipeline import gold, reconcile
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [assistance_row(r["assistance_transaction_unique_key"], r["federal_action_obligation"],
+                                   r["assistance_type_code"], fy="2021", date="2021-03-01")
+                    for r in ASSISTANCE_ROWS if r["assistance_type_code"] == "-1"]
+            summary = gold.summarise(assistance_silver(tmp, rows), 2021, "2026-11-06", "a.zip", kind="assistance")
+
+        def fake_post(url, body):
+            if "geo_layer" not in body:
+                return {"results": [], "page_metadata": {"hasNext": False}}
+            if body["filters"]["award_type_codes"] == ["-1"]:
+                return {"results": [{"shape_code": c, "aggregated_amount": 40.00 if c == "CA" else 0}
+                                    for c in gold.STATES]}
+            return {"results": []}
+        with mock.patch.object(reconcile, "post", fake_post):
+            result = reconcile.reconcile(summary)
+        rows = {r["state"]: r for r in result["not_specified"]["rows"]}
+        self.assertEqual(rows["CA"]["gap_cents"], 0)  # compared like any other category
+        self.assertEqual(result["not_specified"]["official_rows_returned"], 51)
+        self.assertIn("not_specified", result["agency_categories"])
+        self.assertEqual(result["grants"]["status"], "no official figure returned")

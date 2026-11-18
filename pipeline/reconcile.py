@@ -168,12 +168,6 @@ def compare_agencies(ours: dict, official: dict) -> list[dict]:
     return rows
 
 
-# Categories whose official figure is known to be unavailable from the state endpoint. The API
-# returns no rows for code -1, which says nothing about whether the archive has such rows.
-NO_OFFICIAL_FIGURE = {"not_specified": "The geography endpoint returns no results for assistance type -1, "
-                                       "so this bucket has no published figure to compare with."}
-
-
 def reconcile(summary: dict, categories: dict | None = None) -> dict:
     year, kind = summary["fiscal_year"], summary.get("kind", "contracts")
     categories = categories or load_categories()
@@ -191,22 +185,31 @@ def reconcile(summary: dict, categories: dict | None = None) -> dict:
                        "note": "State-layer totals are domestic only; they are not the national all-location total."},
         "categories": names, "population": {}, "official_outside_states": {},
     }
+    unanswered = []
     for name in names:
-        if name in NO_OFFICIAL_FIGURE:
-            result[name] = {"status": "no official figure", "reason": NO_OFFICIAL_FIGURE[name],
+        official, outside, returned = official_by_state(year, categories["api_codes"][name], with_outside=True)
+        result["official_outside_states"][name] = outside
+        if returned == 0:
+            # Observed for this year and query only (FY2025 assistance type -1 returned nothing on
+            # 18 Nov 2026). Not assumed for other years: every category is queried every time.
+            unanswered.append(name)
+            result[name] = {"status": "no official figure returned",
+                            "reason": "The geography endpoint returned no rows for these codes and this year.",
+                            "official_rows_returned": 0,
                             "total_ours_cents": sum(ours_by_state(summary, name).values())}
             continue
-        official, outside, returned = official_by_state(year, categories["api_codes"][name], with_outside=True)
         result[name] = compare(ours_by_state(summary, name), official)
         result[name]["official_rows_returned"] = returned
-        result["official_outside_states"][name] = outside
         if not result["population"]:
             result["population"] = {code: r.get("population") for code, r in official.items() if r.get("population")}
-    agency_categories = ["contracts"] if kind == "contracts" else [n for n in names if n not in NO_OFFICIAL_FIGURE]
+    agency_categories = ["contracts"] if kind == "contracts" else [n for n in names if n not in unanswered]
     codes = [code for n in agency_categories for code in categories["api_codes"][n]]
     ours = (ours_by_agency(summary, agency_categories) if "matrix" in summary
             else summary.get("agency_contracts_in_states", {}))
     result["agency_categories"] = agency_categories
+    result["agency_scope_note"] = ("Agency comparison covers these categories only"
+                                   + (f"; left out because no official state figure was returned: {unanswered}"
+                                      if unanswered else ""))
     result["agencies"] = compare_agencies(ours, official_by_agency(year, codes))
     return result
 

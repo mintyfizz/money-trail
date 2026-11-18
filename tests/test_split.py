@@ -1,12 +1,14 @@
 """Byte-split preservation of oversized source files, reassembly, and rebuild versus refresh."""
+from contextlib import contextmanager
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
-from pipeline import release, source
+from pipeline import guard, release, source
 
 
 class FakeGitHub:
@@ -135,41 +137,102 @@ class SplitTests(unittest.TestCase):
             source.reassemble(m, lambda p: directory / p["name"], self.root / "c.zip", reserve_gib=0,
                               expected_source="FY2025_All_Assistance_Full_20261106.zip")
 
-    def test_rebuild_uses_preserved_bytes_and_never_treasury(self):
+    @staticmethod
+    def release_of(store):
+        assets = {n: {"name": n, "id": i, "size": len(b), "digest": "sha256:" + hashlib.sha256(b).hexdigest()}
+                  for i, (n, b) in enumerate(store.items())}
+
+        @contextmanager
+        def opener(asset):
+            yield io.BytesIO(store[asset["name"]])
+        return assets, opener
+
+    def split_store(self):
         m = release.split_manifest(self.original, part_bytes=300)
         store = {f"{self.original.name}.parts.json": json.dumps(m).encode()}
         for p in m["parts"]:
             store[p["name"]] = self.data[p["offset"]:p["offset"] + p["size"]]
+        return store
 
-        def download(asset, directory):
-            directory.mkdir(parents=True, exist_ok=True)
-            if asset not in store:
-                raise source.SnapshotError("not in release")
-            (directory / asset).write_bytes(store[asset])
-            return directory / asset
+    def test_rebuild_uses_preserved_bytes_and_never_treasury(self):
+        assets, opener = self.release_of(self.split_store())
         with mock.patch.object(source, "head", side_effect=AssertionError("contacted Treasury")):
             result = source.rebuild("o/r", "t", self.original.name, self.root / "rebuilt", reserve_gib=0,
-                                    download=download)
+                                    assets=assets, opener=opener)
         self.assertEqual((self.root / "rebuilt" / self.original.name).read_bytes(), self.data)
         self.assertFalse(result["contacted_treasury"])
         self.assertEqual(result["method"], "reassembled from verified parts")
+        self.assertEqual(list((self.root / "rebuilt" / "_parts").iterdir()),
+                         [self.root / "rebuilt" / "_parts" / f"{self.original.name}.parts.json"])
 
     def test_rebuild_of_an_unsplit_release_checks_the_preserved_digest(self):
         name = "FY2025_All_Contracts_Full_20261106.zip"
         digest = hashlib.sha256(self.data).hexdigest()
         store = {"sha256.txt": f"{digest}  data/zip/{name}\n".encode(), name: self.data}  # as FY2021-24 recorded
-
-        def download(asset, directory):
-            directory.mkdir(parents=True, exist_ok=True)
-            if asset not in store:
-                raise source.SnapshotError("not in release")
-            (directory / asset).write_bytes(store[asset])
-            return directory / asset
-        result = source.rebuild("o/r", "t", name, self.root / "r1", reserve_gib=0, download=download)
+        assets, opener = self.release_of(store)
+        result = source.rebuild("o/r", "t", name, self.root / "r1", reserve_gib=0, assets=assets, opener=opener)
         self.assertEqual(result["sha256"], digest)
         store[name] = self.data + b"!"
+        assets, opener = self.release_of(store)
         with self.assertRaisesRegex(source.SnapshotError, "preserved"):
-            source.rebuild("o/r", "t", name, self.root / "r2", reserve_gib=0, download=download)
+            source.rebuild("o/r", "t", name, self.root / "r2", reserve_gib=0, assets=assets, opener=opener)
+
+    def test_rebuild_refuses_to_start_below_the_reserve(self):
+        name = "FY2025_All_Contracts_Full_20261106.zip"
+        digest = hashlib.sha256(self.data).hexdigest()
+        assets, opener = self.release_of({"sha256.txt": f"{digest}  {name}\n".encode(), name: self.data})
+        reserve = 8 * guard.GIB
+        with mock.patch.object(guard, "free_bytes", return_value=reserve + 200):  # sha file fits, the ZIP does not
+            with self.assertRaisesRegex(RuntimeError, "Disk reserve"):
+                source.rebuild("o/r", "t", name, self.root / "low", reserve_gib=8, assets=assets, opener=opener)
+        self.assertFalse((self.root / "low" / name).exists())
+        store = self.split_store()
+        manifest_bytes = len(store[f"{self.original.name}.parts.json"])
+        assets, opener = self.release_of(store)
+        # The manifest and any one part fit; the whole file plus one part does not.
+        self.assertLess(manifest_bytes, 1072)
+        with mock.patch.object(guard, "free_bytes", return_value=reserve + manifest_bytes):
+            with self.assertRaisesRegex(RuntimeError, r"Disk reserve: \d+ bytes free, 1072 needed"):
+                source.rebuild("o/r", "t", self.original.name, self.root / "low2", reserve_gib=8,
+                               assets=assets, opener=opener)
+
+    def test_download_stops_when_free_space_shrinks_mid_stream(self):
+        asset = {"name": "big.zip", "id": 1, "size": len(self.data),
+                 "digest": "sha256:" + hashlib.sha256(self.data).hexdigest()}
+        free = iter([8 * guard.GIB + 10 ** 6, 8 * guard.GIB + 10 ** 6] + [8 * guard.GIB] * 100)
+
+        @contextmanager
+        def trickle(_):
+            class Slow(io.BytesIO):
+                def read(self, n=-1):
+                    return super().read(100)
+            yield Slow(self.data)
+        with mock.patch.object(guard, "free_bytes", side_effect=lambda path: next(free)):
+            with self.assertRaisesRegex(RuntimeError, "Disk reserve"):
+                source.fetch_asset(asset, self.root / "dl", trickle, reserve_gib=8)
+        self.assertFalse((self.root / "dl" / "big.zip").exists())  # unverified partial removed
+
+    def test_download_rejects_wrong_length_or_digest(self):
+        good = {"name": "a.bin", "id": 1, "size": 4, "digest": "sha256:" + hashlib.sha256(b"abcd").hexdigest()}
+
+        def opener_of(data):
+            @contextmanager
+            def opener(_):
+                yield io.BytesIO(data)
+            return opener
+        for data, message in ((b"abcde", "longer"), (b"abc", "recorded"), (b"abcx", "SHA-256")):
+            with self.subTest(data=data), self.assertRaisesRegex(source.SnapshotError, message):
+                source.fetch_asset(good, self.root / f"d{len(data)}{data[-1]}", opener_of(data), reserve_gib=0)
+        with self.assertRaisesRegex(source.SnapshotError, "no recorded"):
+            source.fetch_asset(dict(good, digest=None), self.root / "nd", opener_of(b"abcd"), reserve_gib=0)
+
+    def test_rebuild_refuses_parts_that_differ_from_the_release_record(self):
+        store = self.split_store()
+        assets, opener = self.release_of(store)
+        part = next(n for n in assets if n.endswith("part002"))
+        assets[part] = dict(assets[part], digest="sha256:" + "0" * 64)
+        with self.assertRaisesRegex(source.SnapshotError, "does not match the parts manifest"):
+            source.rebuild("o/r", "t", self.original.name, self.root / "x", reserve_gib=0, assets=assets, opener=opener)
 
     def test_changed_bytes_get_a_new_snapshot_id(self):
         a = source.snapshot_id("assistance", 2021, "2026-11-06", hashlib.sha256(b"a").hexdigest())

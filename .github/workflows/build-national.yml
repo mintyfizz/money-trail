@@ -92,10 +92,11 @@ jobs:
           else:
               manifest = asset_name(name) + ".parts.json"
               assert manifest in assets, "release has neither the file nor a parts manifest"
-              import subprocess
-              subprocess.run(["gh", "release", "download", os.environ["SOURCE_TAG"], "--repo", os.environ["GITHUB_REPOSITORY"],
-                              "--pattern", manifest, "--dir", "existing"], check=True)
-              m = json.load(open(f"existing/{manifest}"))
+              from pipeline.source import fetch_asset, gh_asset_stream
+              repo = os.environ["GITHUB_REPOSITORY"]
+              path = fetch_asset(assets[manifest], "existing", lambda a: gh_asset_stream(repo, a),
+                                 float(os.environ["RESERVE_GIB"]))
+              m = json.load(open(path))
               assert (m["size"], m["sha256"]) == (size, sha), "preserved parts manifest describes different bytes"
               for part in m["parts"]:
                   a = assets[part["name"]]
@@ -146,7 +147,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DTAG: ${{ steps.req.outputs.deleted_keys_tag }}
         run: |
-          gh release download "$DTAG" --repo "$GITHUB_REPOSITORY" --pattern deleted-keys.parquet --pattern changes.json --dir delta
+          python -m pipeline.source fetch --repository "$GITHUB_REPOSITORY" --tag "$DTAG" --dir delta \
+            --reserve-gib "$RESERVE_GIB" deleted-keys.parquet changes.json
           test "$(python -c 'import json;print(json.load(open("delta/changes.json"))["snapshot_date"])')" = "$DATE"
           echo "DELETED_ARGS=--deleted-keys delta/deleted-keys.parquet --stale-out data/stale-rows.parquet" >> "$GITHUB_ENV"
 

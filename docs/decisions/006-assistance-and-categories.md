@@ -30,10 +30,16 @@ reported as not checked.
 ## Place
 
 Place of performance, not the recipient's address. Assistance place comes from the state FIPS
-code (padded to two digits); an unrecognised FIPS goes to "unknown" and is listed. Micronesia, the
+code. Only a one- or two-digit numeric code is read as FIPS (a one-digit code is padded); anything
+else, such as `060` or `01junk`, is never shortened into a valid code: it goes to "unknown" and is
+listed. Micronesia, the
 Marshall Islands and Palau are freely associated states, which Treasury classifies as foreign; they
 count as foreign for both kinds and are named in the outside-the-map figures. Reconciliation uses
 the 50 states and DC only; territories and the API's blank-place bucket are reported beside it.
+Every category is queried for every year, including `-1`. When the endpoint returns no rows for a
+category (as it did for FY2025 `-1` on 18 November 2026), that category is marked "no official
+figure returned", our total is still shown, and it is left out of the agency comparison, which
+says so.
 
 ## Agencies and recipients
 
@@ -49,7 +55,10 @@ UEI are never ranked as a recipient; their total is shown beside the ranking.
   named by kind, year, snapshot date and SHA-256 prefix. Changed bytes under the same file name get
   a new identifier; an existing release is checked, never overwritten.
 - **Rebuild** reproduces a preserved snapshot from its release only, verifying every part, the
-  whole file's size and SHA-256 and the source file name. It never contacts Treasury, so a
+  whole file's size and SHA-256 and the source file name. Every download is written through the
+  reserve-checked writer: the whole asset must fit above the 8 GiB reserve before the first byte,
+  each write is checked again, and a download longer, shorter or different from its recorded
+  digest fails and its partial copy is removed. It never contacts Treasury, so a
   snapshot stays reproducible after Treasury replaces it.
 - A source file at or above GitHub's per-asset limit (FY2021 assistance: 2,733,086,438 bytes) is
   preserved as exact byte ranges of the original plus a manifest of the whole file's size and
