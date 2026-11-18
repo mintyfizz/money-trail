@@ -225,7 +225,7 @@ def download_source(record: dict, directory: Path, reserve_gib: float = 8, chunk
         except archive.DownloadInterrupted as error:
             if attempt == attempts:
                 raise
-            print(f"attempt {attempt}: {error}; resuming", flush=True)
+            print(f"attempt {attempt}: {error}; resuming", flush=True, file=__import__("sys").stderr)
             time.sleep(pause)
     receipt = json.loads(Path(str(path) + ".receipt.json").read_text())
     return {"path": str(path), "size": receipt["bytes"], "sha256": receipt["sha256"], "etag": receipt["etag"],
@@ -270,7 +270,12 @@ def main() -> None:
                                  sha_asset=args.sha_asset)))
     elif args.command == "download":
         record = json.loads(Path(args.record).read_text())
-        print(json.dumps(download_source(record, Path(args.dir), args.reserve_gib, args.chunk_mib)))
+        # Progress goes to stderr; stdout carries exactly one JSON document.
+        import contextlib
+        import sys
+        with contextlib.redirect_stdout(sys.stderr):
+            result = download_source(record, Path(args.dir), args.reserve_gib, args.chunk_mib)
+        print(json.dumps(result))
     elif args.command == "fetch":
         assets = release_assets(args.repository, args.tag)
         for name in args.assets:

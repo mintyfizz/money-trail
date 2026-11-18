@@ -62,7 +62,7 @@ jobs:
           python -m pipeline.guard data --need "$size" --reserve-gib "$RESERVE_GIB"
           # Resumable downloader: ranges pinned to the strong ETag, exact Content-Range, checksummed
           # prefix checkpoint, reserve checked before every chunk, ZIP CRC verified at the end.
-          python -m pipeline.source download --record out/source.json --dir data/zip --reserve-gib "$RESERVE_GIB" | tee out/download.json
+          python -m pipeline.source download --record out/source.json --dir data/zip --reserve-gib "$RESERVE_GIB" > out/download.json
           cp "data/zip/$name.receipt.json" out/download-receipt.json
           sha=$(sha256sum "data/zip/$name" | cut -d' ' -f1)
           echo "$sha  $name" > out/sha256-source.txt
