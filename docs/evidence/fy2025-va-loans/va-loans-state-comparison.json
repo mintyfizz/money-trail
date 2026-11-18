@@ -1,0 +1,366 @@
+{
+  "states_compared": 51,
+  "state_gaps_equal_all_agency_gap": true,
+  "archive_va_total_cents": 91812483895,
+  "live_va_total_cents": 99387061314,
+  "gap_cents": -7574577419,
+  "rows": [
+    {
+      "state": "AK",
+      "archive_va_subsidy_cents": 78166073,
+      "live_va_subsidy_cents": 97616338,
+      "va_gap_cents": -19450265,
+      "all_agency_loans_gap_cents": -19450265
+    },
+    {
+      "state": "AL",
+      "archive_va_subsidy_cents": 1173504494,
+      "live_va_subsidy_cents": 1324091298,
+      "va_gap_cents": -150586804,
+      "all_agency_loans_gap_cents": -150586804
+    },
+    {
+      "state": "AR",
+      "archive_va_subsidy_cents": 602523094,
+      "live_va_subsidy_cents": 666282938,
+      "va_gap_cents": -63759844,
+      "all_agency_loans_gap_cents": -63759844
+    },
+    {
+      "state": "AZ",
+      "archive_va_subsidy_cents": 3088866686,
+      "live_va_subsidy_cents": 3375975372,
+      "va_gap_cents": -287108686,
+      "all_agency_loans_gap_cents": -287108686
+    },
+    {
+      "state": "CA",
+      "archive_va_subsidy_cents": 10821718293,
+      "live_va_subsidy_cents": 11760898028,
+      "va_gap_cents": -939179735,
+      "all_agency_loans_gap_cents": -939179735
+    },
+    {
+      "state": "CO",
+      "archive_va_subsidy_cents": 2734669967,
+      "live_va_subsidy_cents": 2910579362,
+      "va_gap_cents": -175909395,
+      "all_agency_loans_gap_cents": -175909395
+    },
+    {
+      "state": "CT",
+      "archive_va_subsidy_cents": 527516830,
+      "live_va_subsidy_cents": 527516830,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "DC",
+      "archive_va_subsidy_cents": 46342885,
+      "live_va_subsidy_cents": 73852207,
+      "va_gap_cents": -27509322,
+      "all_agency_loans_gap_cents": -27509322
+    },
+    {
+      "state": "DE",
+      "archive_va_subsidy_cents": 377395790,
+      "live_va_subsidy_cents": 377395790,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "FL",
+      "archive_va_subsidy_cents": 10363488535,
+      "live_va_subsidy_cents": 10838016387,
+      "va_gap_cents": -474527852,
+      "all_agency_loans_gap_cents": -474527852
+    },
+    {
+      "state": "GA",
+      "archive_va_subsidy_cents": 6007706588,
+      "live_va_subsidy_cents": 6475963410,
+      "va_gap_cents": -468256822,
+      "all_agency_loans_gap_cents": -468256822
+    },
+    {
+      "state": "HI",
+      "archive_va_subsidy_cents": 579574549,
+      "live_va_subsidy_cents": 684080021,
+      "va_gap_cents": -104505472,
+      "all_agency_loans_gap_cents": -104505472
+    },
+    {
+      "state": "IA",
+      "archive_va_subsidy_cents": 274382061,
+      "live_va_subsidy_cents": 337437364,
+      "va_gap_cents": -63055303,
+      "all_agency_loans_gap_cents": -63055303
+    },
+    {
+      "state": "ID",
+      "archive_va_subsidy_cents": 317484470,
+      "live_va_subsidy_cents": 351720279,
+      "va_gap_cents": -34235809,
+      "all_agency_loans_gap_cents": -34235809
+    },
+    {
+      "state": "IL",
+      "archive_va_subsidy_cents": 1832491259,
+      "live_va_subsidy_cents": 1933006466,
+      "va_gap_cents": -100515207,
+      "all_agency_loans_gap_cents": -100515207
+    },
+    {
+      "state": "IN",
+      "archive_va_subsidy_cents": 1140100000,
+      "live_va_subsidy_cents": 1233706209,
+      "va_gap_cents": -93606209,
+      "all_agency_loans_gap_cents": -93606209
+    },
+    {
+      "state": "KS",
+      "archive_va_subsidy_cents": 506312328,
+      "live_va_subsidy_cents": 538079472,
+      "va_gap_cents": -31767144,
+      "all_agency_loans_gap_cents": -31767144
+    },
+    {
+      "state": "KY",
+      "archive_va_subsidy_cents": 664328090,
+      "live_va_subsidy_cents": 710463256,
+      "va_gap_cents": -46135166,
+      "all_agency_loans_gap_cents": -46135166
+    },
+    {
+      "state": "LA",
+      "archive_va_subsidy_cents": 1540091872,
+      "live_va_subsidy_cents": 1633472040,
+      "va_gap_cents": -93380168,
+      "all_agency_loans_gap_cents": -93380168
+    },
+    {
+      "state": "MA",
+      "archive_va_subsidy_cents": 997616513,
+      "live_va_subsidy_cents": 997616513,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "MD",
+      "archive_va_subsidy_cents": 3410717532,
+      "live_va_subsidy_cents": 3828556059,
+      "va_gap_cents": -417838527,
+      "all_agency_loans_gap_cents": -417838527
+    },
+    {
+      "state": "ME",
+      "archive_va_subsidy_cents": 159199762,
+      "live_va_subsidy_cents": 159199762,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "MI",
+      "archive_va_subsidy_cents": 1137430035,
+      "live_va_subsidy_cents": 1244665561,
+      "va_gap_cents": -107235526,
+      "all_agency_loans_gap_cents": -107235526
+    },
+    {
+      "state": "MN",
+      "archive_va_subsidy_cents": 992384889,
+      "live_va_subsidy_cents": 1060300968,
+      "va_gap_cents": -67916079,
+      "all_agency_loans_gap_cents": -67916079
+    },
+    {
+      "state": "MO",
+      "archive_va_subsidy_cents": 1042735462,
+      "live_va_subsidy_cents": 1206305408,
+      "va_gap_cents": -163569946,
+      "all_agency_loans_gap_cents": -163569946
+    },
+    {
+      "state": "MS",
+      "archive_va_subsidy_cents": 916384249,
+      "live_va_subsidy_cents": 953143024,
+      "va_gap_cents": -36758775,
+      "all_agency_loans_gap_cents": -36758775
+    },
+    {
+      "state": "MT",
+      "archive_va_subsidy_cents": 80447243,
+      "live_va_subsidy_cents": 87540861,
+      "va_gap_cents": -7093618,
+      "all_agency_loans_gap_cents": -7093618
+    },
+    {
+      "state": "NC",
+      "archive_va_subsidy_cents": 3445186239,
+      "live_va_subsidy_cents": 3897453493,
+      "va_gap_cents": -452267254,
+      "all_agency_loans_gap_cents": -452267254
+    },
+    {
+      "state": "ND",
+      "archive_va_subsidy_cents": 71954500,
+      "live_va_subsidy_cents": 71954500,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "NE",
+      "archive_va_subsidy_cents": 98801336,
+      "live_va_subsidy_cents": 121052262,
+      "va_gap_cents": -22250926,
+      "all_agency_loans_gap_cents": -22250926
+    },
+    {
+      "state": "NH",
+      "archive_va_subsidy_cents": 196959584,
+      "live_va_subsidy_cents": 196959584,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "NJ",
+      "archive_va_subsidy_cents": 1625313296,
+      "live_va_subsidy_cents": 1625313296,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "NM",
+      "archive_va_subsidy_cents": 203566113,
+      "live_va_subsidy_cents": 265083698,
+      "va_gap_cents": -61517585,
+      "all_agency_loans_gap_cents": -61517585
+    },
+    {
+      "state": "NV",
+      "archive_va_subsidy_cents": 1153781845,
+      "live_va_subsidy_cents": 1226466962,
+      "va_gap_cents": -72685117,
+      "all_agency_loans_gap_cents": -72685117
+    },
+    {
+      "state": "NY",
+      "archive_va_subsidy_cents": 1513484352,
+      "live_va_subsidy_cents": 1556141346,
+      "va_gap_cents": -42656994,
+      "all_agency_loans_gap_cents": -42656994
+    },
+    {
+      "state": "OH",
+      "archive_va_subsidy_cents": 1580246432,
+      "live_va_subsidy_cents": 1684483076,
+      "va_gap_cents": -104236644,
+      "all_agency_loans_gap_cents": -104236644
+    },
+    {
+      "state": "OK",
+      "archive_va_subsidy_cents": 901290954,
+      "live_va_subsidy_cents": 1007058272,
+      "va_gap_cents": -105767318,
+      "all_agency_loans_gap_cents": -105767318
+    },
+    {
+      "state": "OR",
+      "archive_va_subsidy_cents": 1086618559,
+      "live_va_subsidy_cents": 1161394245,
+      "va_gap_cents": -74775686,
+      "all_agency_loans_gap_cents": -74775686
+    },
+    {
+      "state": "PA",
+      "archive_va_subsidy_cents": 1524487613,
+      "live_va_subsidy_cents": 1653397956,
+      "va_gap_cents": -128910343,
+      "all_agency_loans_gap_cents": -128910343
+    },
+    {
+      "state": "RI",
+      "archive_va_subsidy_cents": 89959049,
+      "live_va_subsidy_cents": 89959049,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "SC",
+      "archive_va_subsidy_cents": 2891172637,
+      "live_va_subsidy_cents": 3113299334,
+      "va_gap_cents": -222126697,
+      "all_agency_loans_gap_cents": -222126697
+    },
+    {
+      "state": "SD",
+      "archive_va_subsidy_cents": 64675550,
+      "live_va_subsidy_cents": 64675550,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "TN",
+      "archive_va_subsidy_cents": 1596691196,
+      "live_va_subsidy_cents": 1806012525,
+      "va_gap_cents": -209321329,
+      "all_agency_loans_gap_cents": -209321329
+    },
+    {
+      "state": "TX",
+      "archive_va_subsidy_cents": 13632701559,
+      "live_va_subsidy_cents": 14642413522,
+      "va_gap_cents": -1009711963,
+      "all_agency_loans_gap_cents": -1009711963
+    },
+    {
+      "state": "UT",
+      "archive_va_subsidy_cents": 732918660,
+      "live_va_subsidy_cents": 788265470,
+      "va_gap_cents": -55346810,
+      "all_agency_loans_gap_cents": -55346810
+    },
+    {
+      "state": "VA",
+      "archive_va_subsidy_cents": 4861606667,
+      "live_va_subsidy_cents": 5578856404,
+      "va_gap_cents": -717249737,
+      "all_agency_loans_gap_cents": -717249737
+    },
+    {
+      "state": "VT",
+      "archive_va_subsidy_cents": 88688557,
+      "live_va_subsidy_cents": 88688557,
+      "va_gap_cents": 0,
+      "all_agency_loans_gap_cents": 0
+    },
+    {
+      "state": "WA",
+      "archive_va_subsidy_cents": 2289325584,
+      "live_va_subsidy_cents": 2537438398,
+      "va_gap_cents": -248112814,
+      "all_agency_loans_gap_cents": -248112814
+    },
+    {
+      "state": "WI",
+      "archive_va_subsidy_cents": 480094695,
+      "live_va_subsidy_cents": 516266250,
+      "va_gap_cents": -36171555,
+      "all_agency_loans_gap_cents": -36171555
+    },
+    {
+      "state": "WV",
+      "archive_va_subsidy_cents": 138806034,
+      "live_va_subsidy_cents": 165442036,
+      "va_gap_cents": -26636002,
+      "all_agency_loans_gap_cents": -26636002
+    },
+    {
+      "state": "WY",
+      "archive_va_subsidy_cents": 130573335,
+      "live_va_subsidy_cents": 141504306,
+      "va_gap_cents": -10930971,
+      "all_agency_loans_gap_cents": -10930971
+    }
+  ]
+}
