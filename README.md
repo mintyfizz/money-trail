@@ -2,21 +2,34 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: FY2025 national contracts built end to end as a diagnostic pilot; reconciliation does not pass yet.** A GitHub runner downloads Treasury's FY2025 national contracts archive (1.83 GB, 6,658,878 transactions), streams it into a typed transaction layer, aggregates it by state, agency and recipient, and compares each state with USAspending's published totals. All quality gates pass (no unparseable or missing amounts or dates, no duplicate keys). The comparison does not: across the 50 states and DC the archive as published runs $14.81 billion (1.92%) above USAspending's live figures. Compared agency by agency over the same 51 places, the difference is overwhelmingly in the Department of Defense (+$14.82 billion, +3.0%). Most civilian agencies match to the cent or within 0.3%, with smaller gaps elsewhere (the largest in relative terms is the US Agency for Global Media, +$1.34 million or +2.94%). The largest single-state gap is Arkansas (+9.60%); Alabama is +9.31%. Most of the gap is accounted for. The archive contains about 19,000 matched old/new-key candidate pairs from Treasury re-issuing Defense transaction keys in early November 2026. The pairs whose new key was written on 4 November 2026 at 10:11:48 UTC equal the Army's gap to within $4, and to the cent in 50 of 51 places; across all agencies that batch's in-state contracts ($14,814,163,448.02) leave a residual of −$4,561,741.90 against the whole state gap. In sampled awards with a nonzero amount at stake, USAspending's live search counted one copy for that batch, and both copies for a larger 2 November batch whose live transaction records kept one. These are samples, not a check of every transaction, and the live map is not a clean reference either. The figures here stay as Treasury published them. See [decision 005](docs/decisions/005-national-typed-layer.md). The dashboard in `site/` is a local prototype until the gap is explained.
+**Status: national contracts and financial assistance, FY2021–2025, being loaded one scope at a time.** Each scope (one kind, one fiscal year) is built on a GitHub runner from Treasury's national archive, checked by blocking quality gates, compared category by category and agency by agency with USAspending's published state figures, and preserved with its source in verified releases. The [coverage table on the site](site/) and `site/data/index.json` say exactly what is loaded; anything not loaded is shown as not loaded, never as zero.
 
-See the [plan review](docs/plan-review.md), [initial scope decision](docs/decisions/001-scope-and-storage.md), [resumable ingestion decision](docs/decisions/002-resumable-agency-ingestion.md), [raw preservation and deletion decision](docs/decisions/003-raw-parquet-retention.md), [remote snapshot decision](docs/decisions/004-remote-snapshots.md), [national typed layer decision](docs/decisions/005-national-typed-layer.md), and [next steps](docs/NEXT.md).
+What the checks currently show:
 
-## National build (FY2025 pilot)
+- **FY2025 financial assistance:** grants and insurance/other match USAspending to the cent in all 51 places; direct payments pass (+$809,419.06, Arizona); loans fail by −$75,745,774.19, all of it Department of Veterans Affairs loan subsidy cost, equal in every state. The archive is internally consistent (every row matches Treasury's generated amount); whether VA revised records after the snapshot is not established. [Evidence](docs/evidence/fy2025-va-loans/).
+- **FY2024 financial assistance:** all four comparable categories pass (direct payments and other exact, loans within one cent, grants −0.0011%).
+- **FY2025 contracts:** the archive as published runs $14.81 billion (1.92%) above USAspending across the 50 states and DC, overwhelmingly in the Department of Defense, from transaction keys Treasury re-issued in early November 2026. See [decision 005](docs/decisions/005-national-typed-layer.md) for what is proven and what is not. Figures stay as Treasury published them.
+- Assistance type "not specified" (−1) is kept as its own group; USAspending returns no state figure for it, so it is shown unchecked.
 
-`.github/workflows/build-pilot.yml` runs on a GitHub runner when the `run/build-pilot` branch is pushed:
+How spending types, the loan measure, place and agencies are defined: [decision 006](docs/decisions/006-assistance-and-categories.md).
 
-1. **Delta job:** downloads the monthly delta file, types it, writes the transaction keys it marks as deleted, summarises what changed, and preserves all of it in a verified release.
-2. **Year job:** downloads the national full file (space checked first), streams each CSV member from the ZIP into typed Parquet (`pipeline/silver.py`), aggregates it with blocking quality gates (`pipeline/gold.py`), and compares it with USAspending by state and by agency (`pipeline/reconcile.py`). The source ZIP, the typed layer and an audit file of rows whose keys the delta deletes are preserved in a release that is published only after every file's SHA-256 is verified (`pipeline/release.py`).
-3. **Site data:** combines the results into `site/data/` for the dashboard (`pipeline/site_data.py`).
+See also the [plan review](docs/plan-review.md), [decisions 001–004](docs/decisions/) on scope, ingestion and preservation, and [next steps](docs/NEXT.md).
 
-Money is exact integer cents from source to page. Unparseable values, missing amounts or dates, duplicate keys and rows outside the fiscal year stop the build rather than being counted as zero. The free-space reserve (8 GiB) is checked before each download and on every Parquet write.
+## National build
 
-To view the dashboard locally after downloading the `site-data` artifact into `site/data/`:
+`.github/workflows/build-national.yml` runs one scope per push of the `run/build-national` branch, described by `.github/run-request.json` (validated by `pipeline/run_request.py`). Runs never overlap and are never cancelled.
+
+1. **Source.** *Refresh* lists Treasury's files (`pipeline/fetch.py`), records the file's size and strong ETag, downloads it with the resumable, ETag-pinned downloader (`ingest/archive.py`) and preserves it in its own release named by kind, year, snapshot date and SHA-256 prefix; a file at or above GitHub's 2 GiB asset limit is preserved as exact byte ranges with a manifest (`pipeline/release.py`). *Rebuild* reproduces a preserved snapshot from its release alone, verifying every part and the whole file, without contacting Treasury (`pipeline/source.py`).
+2. **Typed layer.** Each CSV member streams from the ZIP into typed Parquet (`pipeline/silver.py`, column contracts in `pipeline/kinds.py`).
+3. **Aggregates.** Place, category (`pipeline/categories.json`) and measure for every row, a full agency × place × category matrix that must add up exactly, recipients and outside-the-map totals, with blocking gates (`pipeline/gold.py`).
+4. **Reconciliation.** Every category against USAspending's state figures, and every agency over the same 51 places (`pipeline/reconcile.py`).
+5. **Preservation.** Typed layer, results and provenance in a build release published only after every asset's SHA-256 is verified.
+
+`pipeline/site_data.py` combines the scopes into `site/data/`. Hand-written findings in `pipeline/disclosures.json` are shown only while the source file and comparison they were made against are still the ones loaded.
+
+Money is exact integer cents from source to page. The free-space reserve (8 GiB) is checked before every download, write and query spill.
+
+To view the dashboard locally:
 
 ```sh
 python3 -m http.server 8765 --directory site
@@ -30,13 +43,13 @@ python3 -m http.server 8765 --directory site
 
 ## Dashboard
 
-A planned map shaded by net obligations for transactions in the selected fiscal year, using place of performance. State and county totals must retain explicit unknown, foreign and territorial buckets. Inflation adjustment and per-resident comparisons require additional documented sources and are deferred from the first pilot.
+A map of the 50 states and DC shaded by the selected year, spending type and awarding agency, by total or per resident; a state panel with types, agencies (net reductions listed apart) and, for whole kinds of award, the largest recipients; money outside the map; a sortable table; a coverage table; and the checks against USAspending. Every figure that a selection changes is summed from the full agency × place × category matrix.
 
 ## Data
 
 Source: [USAspending.gov](https://www.usaspending.gov) (US Treasury), Award Data Archive bulk files.
 
-The archive publishes monthly snapshots and all-years change files. The verified FY2025 files are dated **2026-11-06**. Financial assistance includes more than grants; its categories must be mapped before publishing grant-only results.
+The archive publishes monthly snapshots and all-years change files. The files loaded so far are dated **2026-11-06**.
 
 Raw data is never committed to this repository.
 
@@ -47,7 +60,7 @@ Known limits, stated on the site:
 - A transaction-year slice does not establish an award's complete lifetime history.
 - The inspected prefix is not a random sample and does not establish national row counts or error rates.
 
-## Preferred remote run
+## Earlier per-agency remote run (milestone 1)
 
 See [remote snapshots](docs/decisions/004-remote-snapshots.md) for retention, cost and operational limits. `.github/workflows/remote-ingestion.yml` performs the Treasury transfer and conversion on a GitHub runner, retains the raw ZIP in a private release, and publishes only after local and remote checks pass. Its first run selects the smallest nonempty agency in the saved partial catalogue; larger archives require a deliberate scope selection. No scheduled refresh is enabled.
 
@@ -59,7 +72,7 @@ After publication, download only the preserved Parquet and validation records wi
 
 The command uses the verified pilot release; use another exact tag for a later snapshot. Data lands under `data/github/`. The Mac does not download the original ZIP on this path. The retained release ZIP is the real importer fixture. Both machines retain an 8 GiB free-space reserve. Outputs are capped at 2 GiB per archive by default; each release asset must be below 2 GiB. A small agency's Parquet/ZIP ratio is only a provisional capacity scenario because metadata overhead dominates tiny files.
 
-## Local ingestion alternative
+## Local per-agency ingestion (milestone 1)
 
 Python 3.11+, curl, and macOS/Linux are required. Discovery, downloads and profiling use the standard library; Parquet conversion uses the pinned Arrow dependency. With the existing `uv` installation:
 
@@ -127,9 +140,10 @@ Direct Mac source access remains intermittent (the separate GitHub runner probe 
 | --- | --- |
 | `ingest/` | Downloader and file checks |
 | `pipeline/` | Raw Parquet preservation and retention; national typed layer, aggregates, reconciliation, change records and verified releases |
-| `site/` | Static dashboard: clickable state map, year control, state panel (local prototype) |
+| `site/` | Static dashboard: map, year, spending-type and agency controls, state panel, coverage (not deployed) |
 | `docs/decisions/` | Decision records |
 | `docs/measurements/` | Source metadata and explicitly scoped profiling results |
+| `docs/evidence/` | Small saved requests and comparisons behind specific findings |
 | `tests/` | Offline ingestion and integrity checks |
 
 ## Milestones
