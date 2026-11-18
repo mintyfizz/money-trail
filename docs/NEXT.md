@@ -1,12 +1,29 @@
 # Next work
 
-Milestone 1 is **in progress**. The remote pilot is complete: [successful run](https://github.com/mintyfizz/money-trail/actions/runs/44071758365) and [verified private snapshot](https://github.com/mintyfizz/money-trail/releases/tag/snapshot-2026-11-06-fy2025-contracts-agency-3-r2). The original ZIP is retained remotely; the Mac has only Parquet and validation/provenance records. See `measurements/remote-pilot.json` and `remote-pilot-mac.json`.
+The national build now covers contracts and financial assistance for FY2021–2025, one scope per
+run, each preserved with its source and checked against USAspending (see the coverage table on the
+site and `site/data/index.json`). Nothing is merged or deployed: the work is on `build/fy-pilot`
+for review, and `main` is unchanged. PR #1 (milestone 1, per-agency ingestion) is earlier work.
 
-1. Measure a few additional nonempty agency scopes before expanding. Library of Congress has 106 rows, zero rejects and 119,809 Parquet bytes from a 20,541-byte ZIP (5.8327×). Its 297-column schema has substantial fixed overhead. A linear national-contracts illustration is 9.96 GiB of Parquet, but this is not a validated forecast. The Mac has 21.52 GiB free; the measured runner had 14.29 GiB before processing. The national ZIP plus that illustrative output would breach the runner's 8 GiB reserve. Keep sequential agency scopes and the current 2 GiB output cap until larger measurements support a change.
-2. Resume catalogue expansion with paced, checkpointed requests. The saved catalogue covers 17 of 112 listed agencies with 95 unresolved. Fresh remote discovery also failed after 18 confirmations; there is no established cause. The smallest nonempty claim applies to the saved list only. Do not mix national and agency snapshots or infer national coverage from the catalogue.
-3. Retain the small Library of Congress ZIP as the real importer fixture in its private release. Remote ingestion retains originals, superseding local deletion as the preferred deployment. The local-only guarded deletion option remains available, but no real local ZIP was deleted.
-4. Investigate blank contract award types alongside IDV fields, and map old/new assistance categories before applying business filters. The earlier 10,000-row prefix and this 106-row agency are not nationally representative.
-5. Create typed transaction tables from the preserved raw Parquet, retaining original financial strings and flagged anomalies. Check transaction keys and geographic coverage.
-6. Reconcile one agency and three geographic slices with official transaction totals using aligned filters and snapshot dates. Extend scope after explaining material differences.
+Open items, in the order they would matter to a reader:
 
-PR #1 remains a draft and `main` is unchanged. The remote job is manual (or explicitly launched via the dedicated pilot branch), with no schedule. Before merge, GitHub requires the workflow to exist on the default branch for manual dispatch; this pilot used the dedicated push trigger and a locally prepared release tag. No large conversion or transfer is left running.
+1. **Deployment proposal.** The site is a static folder. Publishing it (for example GitHub Pages)
+   changes who can see it and needs an explicit decision; it is not done here.
+2. **FY2025 loans difference.** All of it is Department of Veterans Affairs loan subsidy cost
+   (−$75,745,774.19, equal in every state). A later snapshot of the FY2025 assistance file, built
+   with `source: refresh`, would show whether VA revised the records; the old snapshot stays
+   preserved and the disclosure stops showing as current once the source or comparison changes.
+3. **FY2025 contracts difference** ($14.81 billion, Defense re-keyed transactions): bounded and
+   documented in decision 005; no correction is applied. Revisit only with new evidence, such as a
+   later snapshot without the duplicate copies.
+4. **Earlier years.** FY2008–2020 use the same workflow (`pipeline/run_request.py` would need its
+   year range widened). Older assistance archives may carry codes the category map lacks; the build
+   stops on any unmapped code rather than guessing.
+5. **Refresh cadence.** Treasury publishes monthly. A refresh is one request per scope; nothing is
+   scheduled. A schedule would need a decision about Actions usage.
+6. **Finer geography and subawards.** County and congressional-district views, and subawards, are
+   not built. The typed layer already keeps county FIPS for assistance and county codes for
+   contracts.
+7. **Recipient rankings by category or agency.** Rankings are exact only for a whole kind and all
+   agencies. Narrower rankings need recipient-level aggregates per category and agency in the
+   summary, not a re-cut of top-ten lists.
