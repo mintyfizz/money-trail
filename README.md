@@ -2,7 +2,9 @@
 
 Where US federal award obligations go, by place, agency and recipient. The long-term aim is reported prime contracts and grants from fiscal year 2008 onward, with a clickable state map.
 
-**Status: the FY2021–FY2025 national contracts and assistance version is complete for review.** All ten scopes are loaded: **80,451,419 transactions** and **25,337 complete agency/place/category cells**, across all awarding agencies reported in the source archives. Every generated cell, source/build provenance record and preserved output was independently verified. Nothing is merged or publicly deployed.
+**Live dashboard: https://money-trail-delta.vercel.app/**
+
+**Status: the FY2021–FY2025 national contracts and assistance version is released.** All ten scopes are loaded: **80,451,419 transactions** and **25,337 complete agency/place/category cells**, across all awarding agencies reported in the source archives. Every generated cell, source/build provenance record and preserved output was independently verified. The work is merged into `main` and the dashboard is public (see [Release](#release)). The repository and its releases stay private.
 
 Each scope (one kind, one fiscal year) is built on a GitHub runner from Treasury's national archive, checked by blocking quality gates, compared category by category and agency by agency with USAspending's published state figures, and preserved with its source in verified releases. The [coverage table on the site](site/) and `site/data/index.json` say exactly what is loaded; anything not loaded is shown as not loaded, never as zero.
 
@@ -88,6 +90,18 @@ python -m pipeline.site_data demo/scopes demo/site-data
 A local build has no `provenance.json`; the page then says provenance was not recorded. Write your own (source release, your commit, source SHA-256) if you need it; never copy one from a different build.
 
 The national typed layer keeps only the columns listed in `pipeline/kinds.py`: money and dates are typed with their raw text kept beside them, the rest stay as text. It does not preserve every source column; the preserved original ZIP is the raw layer.
+
+## Release
+
+| | |
+|---|---|
+| Public URL | https://money-trail-delta.vercel.app/ |
+| Hosting | Vercel project `money-trail`, Hobby plan, static files only (no backend, no build step) |
+| Deployed source | `site/` at commit `94ce150e3fe39034d2bca78d5042990e101e89fb` (18 files, 3,226,352 bytes), released 18 November 2026 |
+| How it was checked | Anonymous HTTP 200; every served file SHA-256-identical to the commit; all five years and ten spending types; deep links and 375 px layout; no console errors |
+| Deployment | **Manual.** No automatic Git deployment is configured: merging to `main` does not change the live site. Redeploy the exact `site/` folder of a reviewed commit by hand. |
+
+The page names its source releases, commits and SHA-256s as text; they are kept in this private repository.
 
 ## The three questions
 
@@ -194,7 +208,7 @@ Direct Mac source access remains intermittent (the separate GitHub runner probe 
 | --- | --- |
 | `ingest/` | Downloader and file checks |
 | `pipeline/` | Raw Parquet preservation and retention; national typed layer, aggregates, reconciliation, change records and verified releases |
-| `site/` | Static dashboard: map, year, spending-type and agency controls, state panel, coverage (not deployed) |
+| `site/` | Static dashboard: map, year, spending-type and agency controls, state panel, coverage (deployed at https://money-trail-delta.vercel.app/) |
 | `docs/decisions/` | Decision records |
 | `docs/measurements/` | Source metadata and explicitly scoped profiling results |
 | `docs/evidence/` | Small saved requests and comparisons behind specific findings |
