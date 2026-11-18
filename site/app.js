@@ -254,8 +254,18 @@
   }
 
   /* ---------- Panel ---------- */
-  function bars(items) {
+  /* Positive and negative contributions are listed apart: a net reduction (an agency taking back
+     more than it committed) lowers the total, so it is shown under its own heading in red. */
+  function splitBars(items, limit, noun) {
+    const pos = items.filter((i) => i.amount_cents > 0), neg = items.filter((i) => i.amount_cents < 0).sort((a, b) => a.amount_cents - b.amount_cents);
     const max = d3.max(items, (i) => Math.abs(i.amount_cents)) || 1;
+    const more = pos.length - limit;
+    let html = bars(pos.slice(0, limit), max) + (more > 0 ? `<p class="note">And ${count(more)} more ${noun}${more === 1 ? "" : "s"} adding to the total.</p>` : "");
+    if (neg.length) html += `<p class="note sub">Net reductions: these took back more than they committed here, so they lower the total.</p>${bars(neg.slice(0, limit), max)}${neg.length > limit ? `<p class="note">And ${count(neg.length - limit)} more.</p>` : ""}`;
+    return html;
+  }
+  function bars(items, scaleMax) {
+    const max = scaleMax || d3.max(items, (i) => Math.abs(i.amount_cents)) || 1;
     return `<ul class="bars">${items.map((i) => `
       <li><span>${esc(titleCase(i.name))}</span>
         <span class="amount${i.amount_cents < 0 ? " negative" : ""}">${money(i.amount_cents)}</span>
@@ -266,14 +276,13 @@
     const d = yearData();
     const items = [...t.agencies.entries()].filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1])
       .map(([i, v]) => ({ name: d.agencies[i].name, amount_cents: v }));
-    const more = items.length - limit;
-    return bars(items.slice(0, limit)) + (more > 0 ? `<p class="note">And ${count(more)} more agenc${more === 1 ? "y" : "ies"}.</p>` : "");
+    return splitBars(items, limit, "agency").replace(/agencys/g, "agencies");
   }
   function categoryBars(t) {
     const d = yearData();
     const items = [...t.cats.entries()].filter(([, v]) => v !== 0).sort((a, b) => b[1] - a[1])
       .map(([i, v]) => ({ name: d.categories[d.category_ids[i]].label, amount_cents: v }));
-    return items.length > 1 ? `<h3>By type of spending</h3>${bars(items)}` : "";
+    return items.length > 1 ? `<h3>By type of spending</h3>${splitBars(items, 10, "type")}` : "";
   }
   function scopeNotes(t) {
     const notes = [];
@@ -585,6 +594,13 @@
   function stopPlay() { clearInterval(state.timer); state.timer = null; $("play").setAttribute("aria-pressed", "false"); $("play").textContent = "Play years"; }
 
   function bind() {
+    // The skip link moves focus to the table without touching the address, so filters stay as they are.
+    document.querySelector(".skip").addEventListener("click", (e) => {
+      e.preventDefault();
+      const target = $("table-title");
+      target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+      target.focus({ preventScroll: true });
+    });
     $("year-buttons").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-year]"); if (!b) return;
       stopPlay(); navigate({ year: +b.dataset.year });
@@ -640,8 +656,13 @@
       bind();
       render();
       // Links, the back button and edited addresses all go through the same path.
-      window.addEventListener("popstate", () => { stopPlay(); readHash(); render(); });
-      window.addEventListener("hashchange", () => { stopPlay(); readHash(); render(); });
+      const restore = () => {
+        // Only an address that carries the page's own state changes it; a plain in-page anchor does not.
+        if (!/(^#|&)fy=/.test(location.hash)) { history.replaceState(null, "", hashFor()); return; }
+        stopPlay(); readHash(); render();
+      };
+      window.addEventListener("popstate", restore);
+      window.addEventListener("hashchange", restore);
     } catch (err) {
       $("lede").innerHTML = `<span class="error">The data files did not load (${esc(err.message)}). If you opened this page from disk, serve the folder over HTTP instead.</span>`;
       console.error(err);
